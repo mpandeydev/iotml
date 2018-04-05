@@ -12,7 +12,7 @@ import tensorflow as tf
 sess = tf.Session()
 
 # Set RNN Parameters
-min_word_freq = 5
+min_word_freq = 1
 rnn_size = 128
 epochs = 10
 batch_size = 100
@@ -20,7 +20,7 @@ learning_rate = 0.001
 training_seq_len = 50
 embedding_size = rnn_size
 save_every = 500
-eval_every = 50
+eval_every = 1
 prime_texts = ['thou art more', 'to be or not to', 'wherefore art thou']
 
 data_dir = 'temp'
@@ -78,6 +78,12 @@ def build_vocab(text, min_word_freq):
     # Create index --> vocab mapping
     ix_to_vocab_dict = {val:key for key,val in vocab_to_ix_dict.items()}
     return(ix_to_vocab_dict, vocab_to_ix_dict)
+    #chars = list(set(text))
+    #data_size, X_size = len(text), len(chars)
+    #print("data has %d characters, %d unique" % (data_size, X_size))
+    #char_to_idx = {ch:i for i,ch in enumerate(chars)}
+    #idx_to_char = {i:ch for i,ch in enumerate(chars)}
+    #return(idx_to_char, char_to_idx)
     
 # Convert vocab to indices
     
@@ -96,46 +102,46 @@ for ix, x in enumerate(s_text_words):
 # Create moedl in class object
         
 class LSTM_Model():
-    def __init__(self, rnn_size, batch_size, learning_rate, training_seq_len, vocab_size, infer =False):
+    def __init__(self, rnn_size, batch_size, learning_rate, training_seq_len, vocab_size, infer_sample=False):
         self.rnn_size = rnn_size
         self.vocab_size = vocab_size
-        self.infer = infer
+        self.infer_sample = infer_sample
         self.learning_rate = learning_rate
-        if infer:
+        if infer_sample:
             self.batch_size = 1
             self.training_seq_len = 1
         else:
             self.batch_size = batch_size
             self.training_seq_len = training_seq_len
-            self.lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(rnn_size)
-            self.initial_state = self.lstm_cell.zero_state(self.batch_size, tf.float32)
-            self.x_data = tf.placeholder(tf.int32,[self.batch_size, self.training_seq_len])
-            self.y_output = tf.placeholder(tf.int32, [self.batch_size, self.training_seq_len])
+        self.lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(rnn_size)
+        self.initial_state = self.lstm_cell.zero_state(self.batch_size, tf.float32)
+        self.x_data = tf.placeholder(tf.int32,[self.batch_size, self.training_seq_len])
+        self.y_output = tf.placeholder(tf.int32, [self.batch_size, self.training_seq_len])
         with tf.variable_scope('lstm_vars'):
             # Softmax Output Weights
             W = tf.get_variable('W', [self.rnn_size, self.vocab_size], tf.float32, tf.random_normal_initializer())
             b = tf.get_variable('b', [self.vocab_size], tf.float32, tf.constant_initializer(0.0))
-        # Define Embedding
-        embedding_mat = tf.get_variable('embedding_mat', [self.vocab_size, self.rnn_size], tf.float32, tf.random_normal_initializer())
-        embedding_output = tf.nn.embedding_lookup(embedding_mat, self.x_data)
-        rnn_inputs = tf.split(1, self.training_seq_len, embedding_output)
-        rnn_inputs_trimmed = [tf.squeeze(x, [1]) for x in rnn_inputs]
-        # If we are inferring (generating text), we add a 'loop' function
-        # Define how to get the i+1 th input from the i th output
-    def inferred_loop(prev, count):
-        prev_transformed = tf.matmul(prev, W) + b
-        prev_symbol = tf.stop_gradient(tf.argmax(prev_transformed, 1))
-        output = tf.nn.embedding_lookup(embedding_mat, prev_symbol)
-        return(output)
-        #decoder = tf.nn.seq2seq.rnn_decoder
-        decoder = tf.contrib.legacy_seq2seq.model_with_buckets
-        outputs, last_state = decoder(rnn_inputs_trimmed, self.initial_state, self.lstm_cell, loop_function=inferred_loop if infer else None)
+            # Define Embedding
+            embedding_mat = tf.get_variable('embedding_mat', [self.vocab_size, self.rnn_size], tf.float32, tf.random_normal_initializer())
+            embedding_output = tf.nn.embedding_lookup(embedding_mat, self.x_data)
+            rnn_inputs = tf.split(embedding_output, self.training_seq_len, 1)
+            rnn_inputs_trimmed = [tf.squeeze(x, [1]) for x in rnn_inputs]
+            # If we are inferring (generating text), we add a 'loop' function
+            # Define how to get the i+1 th input from the i th output
+        def inferred_loop(prev, count):
+            prev_transformed = tf.matmul(prev, W) + b
+            prev_symbol = tf.stop_gradient(tf.argmax(prev_transformed, 1))
+            output = tf.nn.embedding_lookup(embedding_mat, prev_symbol)
+            return(output)
+            #decoder = tf.nn.seq2seq.rnn_decoder
+        decoder = tf.contrib.legacy_seq2seq.rnn_decoder
+        outputs, last_state = decoder(rnn_inputs_trimmed, self.initial_state, self.lstm_cell, loop_function=inferred_loop if infer_sample else None)
         # Non inferred outputs
-        output = tf.reshape(tf.concat(1, outputs), [-1, self.rnn_size])
+        output = tf.reshape(tf.concat(axis=1, values=outputs), [-1, self.rnn_size])
         # Logits and output
         self.logit_output = tf.matmul(output, W) + b
         self.model_output = tf.nn.softmax(self.logit_output)
-        loss_fun = tf.nn.seq2seq.sequence_loss_by_example
+        loss_fun = tf.contrib.legacy_seq2seq.sequence_loss_by_example
         loss = loss_fun([self.logit_output], [tf.reshape(self.y_output, [-1])], [tf.ones([self.batch_size * self.training_seq_len])],self.vocab_size)
         self.cost = tf.reduce_sum(loss) / (self.batch_size * self.training_seq_len)
         self.final_state = last_state
@@ -165,11 +171,10 @@ class LSTM_Model():
                 out_sentence = out_sentence + ' ' + word
             return(out_sentence)
 
-with tf.variable_scope('lstm_model') as scope:
+lstm_model = LSTM_Model(rnn_size, batch_size, learning_rate, training_seq_len, vocab_size)
+with tf.variable_scope(tf.get_variable_scope(),reuse=True) as scope:
     # Define LSTM Model
-    lstm_model = LSTM_Model(rnn_size, batch_size, learning_rate, training_seq_len, vocab_size)
-    scope.reuse_variables()
-    test_lstm_model = LSTM_Model(rnn_size, batch_size, learning_rate, training_seq_len, vocab_size, infer=True)
+    test_lstm_model = LSTM_Model(rnn_size, batch_size, learning_rate, training_seq_len, vocab_size, infer_sample=True)
     
     saver = tf.train.Saver()
     # Create batches for each epoch
@@ -212,11 +217,12 @@ with tf.variable_scope('lstm_model') as scope:
             print('Model Saved To: {}'.format(model_file_name))
             # Save vocabulary
             dictionary_file = os.path.join(full_model_dir, 'vocab.pkl')
-        with open(dictionary_file, 'wb') as dict_file_conn:
-            pickle.dump([vocab2ix, ix2vocab], dict_file_conn)
-            if iteration_count % eval_every == 0:
-                for sample in prime_texts:
-                    print(test_lstm_model.sample(sess, ix2vocab, vocab2ix, num=10, prime_text=sample))
+            with open(dictionary_file, 'wb') as dict_file_conn:
+                pickle.dump([vocab2ix, ix2vocab], dict_file_conn)
+        if iteration_count % eval_every == 0:
+            for sample in prime_texts:
+                print(test_lstm_model.sample(sess, ix2vocab, vocab2ix, num=10, prime_text=sample))
+                print()
         iteration_count += 1
     plt.plot(train_loss, 'k-')
     plt.title('Sequence to Sequence Loss')

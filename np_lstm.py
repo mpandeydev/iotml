@@ -6,7 +6,7 @@ from IPython import display
 import activation as act
 plt.style.use('seaborn-white')
 
-data = open('shakespeare.txt', 'r').read()
+data = open('temp/shakespeare.txt', 'r').read()
 
 chars = list(set(data))
 data_size, X_size = len(data), len(chars)
