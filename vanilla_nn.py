@@ -135,16 +135,16 @@ bf = tf.Variable(tf.random_normal(shape=[hidden_layer_nodes_f]))
 
 # Layer outputs 
 
-hidden_out = tf.nn.sigmoid(tf.add(tf.matmul(x_data,A1),b1))
-hidden_out_2 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out,A2),b2))
-hidden_out_3 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_2,A3),b3))
-hidden_out_4 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_3,A4),b4))
-hidden_out_5 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_4,A5),b5))
-hidden_out_6 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_5,A6),b6))
-hidden_out_7 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_6,A7),b7))
-final_out = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_7,Af),bf))
+hidden_out = tf.nn.relu(tf.add(tf.matmul(x_data,A1),b1))
+hidden_out_2 = tf.nn.relu(tf.add(tf.matmul(hidden_out,A2),b2))
+hidden_out_3 = tf.nn.relu(tf.add(tf.matmul(hidden_out_2,A3),b3))
+hidden_out_4 = tf.nn.relu(tf.add(tf.matmul(hidden_out_3,A4),b4))
+hidden_out_5 = tf.nn.relu(tf.add(tf.matmul(hidden_out_4,A5),b5))
+hidden_out_6 = tf.nn.relu(tf.add(tf.matmul(hidden_out_5,A6),b6))
+hidden_out_7 = tf.nn.relu(tf.add(tf.matmul(hidden_out_6,A7),b7))
+final_out = tf.nn.relu(tf.add(tf.matmul(hidden_out_7,Af),bf))
 fprob = tf.nn.softmax(final_out, name=None)
-
+ 
 
 #*****************************************************************************
 
