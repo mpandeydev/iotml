@@ -13,24 +13,31 @@ from sklearn import datasets
 import csv
  
 samplen = 9000
-batch_size = 1000
+batch_size = 50
 generations = 100000
 
 sample_length = 4800
 
 # Architecture of Network --> get weights here
 
-hidden_layer_nodes = 200
-hidden_layer_nodes_2 = 150
-hidden_layer_nodes_3 = 100
-hidden_layer_nodes_4 = 75
-hidden_layer_nodes_5 = 50
-hidden_layer_nodes_6 = 20
-hidden_layer_nodes_7 = 10
+hidden_layer_nodes = 1000
+hidden_layer_nodes_2 = 700
+hidden_layer_nodes_3 = 700
+hidden_layer_nodes_4 = 500
+hidden_layer_nodes_5 = 500
+hidden_layer_nodes_6 = 200
+hidden_layer_nodes_7 = 100
 
 hidden_layer_nodes_f = 5
 
 step_size = 0.005
+#--------------------------------------------------------------------------------------------------------------
+
+# General Activation Function
+
+def activation(layer_input,weights,bias):
+    return tf.nn.sigmoid(tf.add(tf.matmul(layer_input,weights),bias))
+
 
 #--------------------------------------------------------------------------------------------------------------
 
@@ -134,18 +141,29 @@ Af = tf.Variable(tf.random_normal(shape=[hidden_layer_nodes_7,hidden_layer_nodes
 bf = tf.Variable(tf.random_normal(shape=[hidden_layer_nodes_f]))
 
 # Layer outputs 
+# relu
+# sigmoid
 
-hidden_out = tf.nn.relu(tf.add(tf.matmul(x_data,A1),b1))
+'''hidden_out = tf.nn.sigmoid(tf.add(tf.matmul(x_data,A1),b1))
 hidden_out_2 = tf.nn.relu(tf.add(tf.matmul(hidden_out,A2),b2))
-hidden_out_3 = tf.nn.relu(tf.add(tf.matmul(hidden_out_2,A3),b3))
+hidden_out_3 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_2,A3),b3))
 hidden_out_4 = tf.nn.relu(tf.add(tf.matmul(hidden_out_3,A4),b4))
-hidden_out_5 = tf.nn.relu(tf.add(tf.matmul(hidden_out_4,A5),b5))
+hidden_out_5 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_4,A5),b5))
 hidden_out_6 = tf.nn.relu(tf.add(tf.matmul(hidden_out_5,A6),b6))
-hidden_out_7 = tf.nn.relu(tf.add(tf.matmul(hidden_out_6,A7),b7))
-final_out = tf.nn.relu(tf.add(tf.matmul(hidden_out_7,Af),bf))
+hidden_out_7 = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_6,A7),b7))
+final_out = tf.nn.sigmoid(tf.add(tf.matmul(hidden_out_7,Af),bf))
+fprob = tf.nn.softmax(final_out, name=None)'''
+ 
+hidden_out = activation(x_data,A1,b1)
+hidden_out_2 = activation(hidden_out,A2,b2)
+hidden_out_3 = activation(hidden_out_2,A3,b3)
+hidden_out_4 = activation(hidden_out_3,A4,b4)
+hidden_out_5 = activation(hidden_out_4,A5,b5)
+hidden_out_6 = activation(hidden_out_5,A6,b6)
+hidden_out_7 = activation(hidden_out_6,A7,b7)
+final_out = activation(hidden_out_7,Af,bf)
 fprob = tf.nn.softmax(final_out, name=None)
  
-
 #*****************************************************************************
 
 # Define Loss function
@@ -204,7 +222,7 @@ for i in range(generations):
     test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
     
     # Print updates
-    if (i+1)%100==0:
+    if (i+1)%1000==0:
         print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
         #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
         
