@@ -17,15 +17,12 @@ hidden_layer_nodes_f = 5
 step_size = 0.0002 
  
 samplen = 9000
-batch_size = 1
+batch_size = 100
 generations = 10000
 
 sample_length = 4800
-filter_width = 10
-kernel_stride = 10
-
-x_data = tf.placeholder(shape=(None, sample_length,1), dtype=tf.float32)
-y_target = tf.placeholder(shape=(None), dtype=tf.int32)
+filter_width = 4
+kernel_stride = 2
 
 localtime = time.asctime( time.localtime(time.time()) )
 print("Start time :", localtime)
@@ -80,7 +77,7 @@ localtime = time.asctime( time.localtime(time.time()) )
 print("Loaded Dataset :", localtime)
 
 config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.8
+config.gpu_options.per_process_gpu_memory_fraction = 0.4
 sess = tf.Session(config=config)
 
 # Fix seed
@@ -118,6 +115,11 @@ localtime = time.asctime( time.localtime(time.time()) )
 print("Setup Complete :", localtime)
 
 #*****************************************************************************
+ # Placeholders
+x_data = tf.placeholder(shape=(None, sample_length,1), dtype=tf.float32)
+y_target = tf.placeholder(shape=(None), dtype=tf.int32)
+
+
 # Change functions from here on out if architecture changes
 
 #filterz = tf.random_normal(shape=[3], dtype=tf.float32)
@@ -127,19 +129,20 @@ filter_1d = np.array(np.random.rand(filter_width))
 filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float32)
 filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
 
-filter_ip = x_data#tf.reshape(x_data,shape=[tf.shape(x_data)[0]/4800,4800,1])
+#filter_ip = x_data#tf.reshape(x_data,shape=[tf.shape(x_data)[0]/4800,4800,1])
 #dense = tf.layers.dense(inputs=conv2, units=1024, activation=tf.nn.relu)
  
 # Set up Computation Graph 
-conv1d = tf.squeeze(tf.nn.conv1d(value=filter_ip,filters=filter_1d,stride=kernel_stride,padding="VALID"))
-conv1d_flat = tf.reshape(conv1d, [-1, 480])
+#conv1d = tf.squeeze(tf.nn.conv1d(value=x_data,filters=filter_1d,stride=kernel_stride,padding="VALID"))
+conv1d = tf.layers.conv1d(inputs=x_data,filters=1,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+conv1d_flat = tf.reshape(conv1d, [-1, 2399])
 fc_1 = tf.layers.dense(conv1d_flat,400,activation=tf.nn.relu)
 fc_2 = tf.layers.dense(fc_1,5,activation=tf.nn.relu)
 fprob = tf.nn.softmax(fc_2, name=None)
 
 localtime = time.asctime( time.localtime(time.time()) )
 print("Graph Defined :", localtime)
- 
+
 #*****************************************************************************
 
 # Define Loss function
@@ -172,45 +175,46 @@ test_rate = []
 # Train 
 
 for i in range(generations):
+    with tf.Graph().as_default():
     
-    # Get random batch
-    
-    rand_index = np.random.choice(len(x_vals_train), size = batch_size)
-    rand_x = x_vals_train[rand_index]
-    rand_y = y_vals_train[rand_index]
-    rand_x = sess.run(tf.reshape(rand_x,[1,4800,1]))
-    
-    # Training step
-    
-    sess.run(train_step, feed_dict={x_data : rand_x, y_target:rand_y})
-    temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : rand_x, y_target:rand_y} )
-    loss_vec.append(temp_loss)
-    
-    x_vals_train = sess.run(tf.reshape(x_vals_train,[7200,4800,1]))
-    temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : x_vals_train, y_target:y_vals_train} )
-    guess = np.argmax(get_pred,axis=1)
-    pred_vec.append(guess)
-    correct_pred = np.sum(np.equal(guess,y_vals_train))
-    successful_guesses.append(correct_pred)
-    success_rate.append(correct_pred/len(x_vals_train) )
-    train_accuracy = round(correct_pred*100/len(x_vals_train),4)
-    
-    # Get testing loss
-    x_vals_test = sess.run(tf.reshape(x_vals_test,[900,4800,1]))
-    test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : x_vals_test, y_target:y_vals_test})
-    test_loss.append(test_temp_loss)
-    test_pred.append(predict)
-    test_guess = np.argmax(predict,axis=1)
-    test_correct_pred = np.sum(np.equal(test_guess,y_vals_test))
-    test_rate.append(test_correct_pred/len(y_vals_test))
-    test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
-    
-    # Print updates
-    if (i+1)%10==0:
-        #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
-        #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
-        localtime = time.asctime( time.localtime(time.time()) )
-        print('Generation: ' + str(i+1) + '. Training Accuracy = ' + str((train_accuracy))+'. Test Accuracy = ' + str((test_accuracy))+'. Time :'+str(localtime))
+        # Get random batch
+        
+        rand_index = np.random.choice(len(x_vals_train), size = batch_size)
+        rand_x = [x_vals[rand_index]]
+        rand_y = y_vals_train[rand_index]
+        #rand_x = sess.run(tf.reshape(rand_x,[1,4800,1]))
+        
+        # Training step
+        
+        sess.run(train_step, feed_dict={x_data : np.array([rand_x]).reshape((batch_size,4800,1)), y_target:rand_y})
+        temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,4800,1)), y_target:rand_y} )
+        loss_vec.append(temp_loss)
+        
+        #x_vals_train = sess.run(tf.reshape(x_vals_train,[7200,4800,1]))
+        temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,4800,1)), y_target:y_vals_train} )
+        guess = np.argmax(get_pred,axis=1)
+        pred_vec.append(guess)
+        correct_pred = np.sum(np.equal(guess,y_vals_train))
+        successful_guesses.append(correct_pred)
+        success_rate.append(correct_pred/len(x_vals_train) )
+        train_accuracy = round(correct_pred*100/len(x_vals_train),4)
+        
+        # Get testing loss
+        #x_vals_test = sess.run(tf.reshape(x_vals_test,[900,4800,1]))
+        test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,4800,1)), y_target:y_vals_test})
+        test_loss.append(test_temp_loss)
+        test_pred.append(predict)
+        test_guess = np.argmax(predict,axis=1)
+        test_correct_pred = np.sum(np.equal(test_guess,y_vals_test))
+        test_rate.append(test_correct_pred/len(y_vals_test))
+        test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
+        
+        # Print updates
+        if (i+1)%10==0:
+            #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
+            #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
+            localtime = time.asctime( time.localtime(time.time()) )
+            print('Generation: ' + str(i+1) + '. Training Accuracy = ' + str((train_accuracy))+'. Test Accuracy = ' + str((test_accuracy))+'. Time :'+str(localtime))
     
 validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : x_vals_validation, y_target:y_vals_validation})
 validation_guess = np.argmax(validation_predict,axis=1)
