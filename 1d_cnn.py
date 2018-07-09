@@ -2,6 +2,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import datetime
 import csv
 
 hidden_layer_nodes = 1000
@@ -210,11 +211,12 @@ for i in range(generations):
         test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
         
         # Print updates
-        if (i+1)%10==0:
+        if (i+1)%1000==0:
             #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
             #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
-            localtime = time.asctime( time.localtime(time.time()) )
-            print('Generation: ' + str(i+1) + '. Training Accuracy = ' + str((train_accuracy))+'. Test Accuracy = ' + str((test_accuracy))+'. Time :'+str(localtime))
+            #localtime = time.asctime( time.localtime(time.time()) )
+            time_now = datetime.datetime.now().time()
+            print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+'. Time :'+str(time_now ))
     
 validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : x_vals_validation, y_target:y_vals_validation})
 validation_guess = np.argmax(validation_predict,axis=1)
