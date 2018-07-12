@@ -5,9 +5,9 @@ import time
 import datetime
 import csv
 
-hidden_layer_nodes = 1000
-hidden_layer_nodes_2 = 700
-hidden_layer_nodes_3 = 300
+hidden_layer_nodes = 600
+hidden_layer_nodes_2 = 400
+hidden_layer_nodes_3 = 200
 hidden_layer_nodes_4 = 5
 hidden_layer_nodes_5 = 500
 hidden_layer_nodes_6 = 200
@@ -19,23 +19,30 @@ step_size           = 0.05
  
 samplen             = 9000
 batch_size          = 200
+input_channels      = 3
  
-ffgenerations         = 15000
+generations         = 15000
 
-sample_length       = 4800
+sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 10
-filter_count        = 6
+feature_maps       = 6
 
-pool_sizes          = 4
-pool_stride         = 4
+pool_sizes          = 2
+pool_stride         = pool_sizes
 
-conv_size           = 570
+conv_size           = 104
 
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
 sess = tf.Session(config=config)
+
+x_vals = []
+y_vals = []
+
+speeds = []
+types = []
 
 x_vals_train = []
 x_vals_validation = []
@@ -55,24 +62,19 @@ def activation(layer_input,weights,bias):
 
 #--------------------------------------------------------------------------------------------------------------
 
+def import_npy():
+    global x_vals,speeds,types
+    tdata = np.load('../training_data_3d.npy')
+    speeds = tdata[:,3,0]
+    types = tdata[:,3,1]
+    x_vals = tdata[:,0:3,:]
 
 def setup():
-    global x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation
+    global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation
     localtime = time.asctime( time.localtime(time.time()) )
-    print("Start time :", localtime)
+    print("Start time :", localtime)    
     
-    # Architecture of Network --> get weights here
-    
-    # Load data from csv
-    mag_dataset = []
-    choice = []
-    
-    with open('../training_data.csv', 'r') as f:  #opens PW file
-        reader = csv.reader(f)
-        mag_data = list(list(rec) for rec in csv.reader(f, delimiter=',')) #reads csv into a list of lists'
-    
-    
-    x_vals = np.array([x[0:sample_length] for x in mag_data])
+    x_vals = np.array([x[0:sample_length] for x in x_vals])
     choice = np.random.choice(len(x_vals), size = samplen)
     x_vals = x_vals[np.array(choice)]
     
@@ -91,8 +93,8 @@ def setup():
     
     #y_vals = np.array([x[4800:4805] for x in mag_data]) # 4800:4805 for speed ; 4805:4813 for type if One hot encoded
     
-    y_vals = np.array([x[sample_length] for x in mag_data])
-    y_vals = np.array(y_vals[np.array(choice)])
+    y_vals = np.array([speeds[:]])
+    y_vals = np.array(y_vals[0,np.array(choice)])
     y_vals = y_vals.astype(np.float)
     y_vals = y_vals.astype(np.int32)
     
@@ -114,10 +116,10 @@ def setup():
     y_vals_validation = y_vals[validation_indices]
     y_vals_test = y_vals[test_indices]
     
-    y_vals_train = np.array(y_vals_train)
+    '''y_vals_train = np.array(y_vals_train)
     y_vals_validation = np.array(y_vals_validation)
-    y_vals_test = np.array(y_vals_test)
-
+    y_vals_test = np.array(y_vals_test)'''
+    
     # Declare batch size and placeholders
         
     localtime = time.asctime( time.localtime(time.time()) )
@@ -126,33 +128,28 @@ def setup():
 #*****************************************************************************
     
 def run_network(fc , fc2):
-    pool_sizes = fc
+    feature_maps = fc
     conv_size = fc2
     print("Parameter is : ",fc )
      # Placeholders
-    x_data = tf.placeholder(shape=(None, sample_length,1), dtype=tf.float32)
+    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
     y_target = tf.placeholder(shape=(None), dtype=tf.int32)
     
     
     # Change functions from here on out if architecture changes
-    
-    #filterz = tf.random_normal(shape=[3], dtype=tf.float32)
-    #filterz = tf.expand_dims(filterz, axis = 2)
+
     #conv2 = tf.nn.conv1d(x_data,filterz, stride=2, padding="VALID")
     filter_1d = np.array(np.random.rand(filter_width))
     filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float32)
     filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
-    
-    #filter_ip = x_data#tf.reshape(x_data,shape=[tf.shape(x_data)[0]/4800,4800,1])
-    #dense = tf.layers.dense(inputs=conv2, units=1024, activation=tf.nn.relu)
-     
+         
     # Set up Computation Graph 
     #conv1d = tf.squeeze(tf.nn.conv1d(value=x_data,filters=filter_1d,stride=kernel_stride,padding="VALID"))
-    conv1d = tf.layers.conv1d(inputs=x_data,filters=filter_count,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+    conv1d = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
     #conv1d_flat = tf.reshape(conv1d, [-1, int(sample_length/kernel_stride)-1])
     pool1d = tf.layers.max_pooling1d(inputs=conv1d, pool_size=pool_sizes, strides=pool_stride)
-    #conv1d_flat = tf.reshape(pool1d, [-1, int(sample_length*filter_count/pool_sizes) ])
-    conv1d_flat = tf.reshape(pool1d, [-1, conv_size])
+    conv1d_flat = tf.reshape(pool1d, [-1, int(sample_length*feature_maps/pool_sizes) ])
+    conv1d_flat = tf.reshape(conv1d_flat, [-1, conv_size])
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
     fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
@@ -209,12 +206,12 @@ def run_network(fc , fc2):
             
             # Training step
             
-            sess.run(train_step, feed_dict={x_data : np.array([rand_x]).reshape((batch_size,4800,1)), y_target:rand_y})
-            temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,4800,1)), y_target:rand_y} )
+            sess.run(train_step, feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,3)), y_target:rand_y})
+            temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
             loss_vec.append(temp_loss)
             
             #x_vals_train = sess.run(tf.reshape(x_vals_train,[7200,4800,1]))
-            temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,4800,1)), y_target:y_vals_train} )
+            temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
             guess = np.argmax(get_pred,axis=1)
             pred_vec.append(guess)
             correct_pred = np.sum(np.equal(guess,y_vals_train))
@@ -224,7 +221,7 @@ def run_network(fc , fc2):
             
             # Get testing loss
             #x_vals_test = sess.run(tf.reshape(x_vals_test,[900,4800,1]))
-            test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,4800,1)), y_target:y_vals_test})
+            test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), y_target:y_vals_test})
             test_loss.append(test_temp_loss)
             test_pred.append(predict)
             test_guess = np.argmax(predict,axis=1)
@@ -240,7 +237,7 @@ def run_network(fc , fc2):
                 #time_now = datetime.datetime.now().time()
                 print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
         
-    validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,4800,1)), y_target:y_vals_validation})
+    validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target:y_vals_validation})
     validation_guess = np.argmax(validation_predict,axis=1)
     validation_correct_pred = np.sum(np.equal(validation_guess,y_vals_validation))
     validation_accuracy = round(validation_correct_pred*100/len(y_vals_validation),4)
@@ -267,11 +264,8 @@ def run_network(fc , fc2):
     plt.legend(loc='upper right')
     plt.show()
     
-#setup()
-#run_network(2)
-
-#setup()
-#run_network(2)
-
+    sess.close()
+  
+import_npy()
 setup()
-run_network(4, 63789429)
+run_network(6,480) 
