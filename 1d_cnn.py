@@ -205,7 +205,6 @@ def run_network(fc , fc2):
             rand_index = np.random.choice(len(x_vals_train), size = batch_size)
             rand_x = [x_vals_train[rand_index]]
             rand_y = y_vals_train[rand_index]
-            #rand_x = sess.run(tf.reshape(rand_x,[1,4800,1]))
             
             # Training step
             
@@ -213,7 +212,6 @@ def run_network(fc , fc2):
             temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,4800,1)), y_target:rand_y} )
             loss_vec.append(temp_loss)
             
-            #x_vals_train = sess.run(tf.reshape(x_vals_train,[7200,4800,1]))
             temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,4800,1)), y_target:y_vals_train} )
             guess = np.argmax(get_pred,axis=1)
             pred_vec.append(guess)
@@ -223,7 +221,6 @@ def run_network(fc , fc2):
             train_accuracy = round(correct_pred*100/len(x_vals_train),4)
             
             # Get testing loss
-            #x_vals_test = sess.run(tf.reshape(x_vals_test,[900,4800,1]))
             test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,4800,1)), y_target:y_vals_test})
             test_loss.append(test_temp_loss)
             test_pred.append(predict)
@@ -234,8 +231,6 @@ def run_network(fc , fc2):
             
             # Print updates
             if (i+1)%100==0:
-                #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
-                #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
                 #localtime = time.asctime( time.localtime(time.time()) )
                 #time_now = datetime.datetime.now().time()
                 print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))

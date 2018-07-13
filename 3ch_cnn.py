@@ -29,7 +29,7 @@ filter_width        = 8
 kernel_stride       = 10
 feature_maps       = 6
 
-pool_sizes          = 2
+pool_sizes          = 4
 pool_stride         = pool_sizes
 
 conv_size           = 104
@@ -147,7 +147,7 @@ def run_network(fc , fc2):
     #conv1d = tf.squeeze(tf.nn.conv1d(value=x_data,filters=filter_1d,stride=kernel_stride,padding="VALID"))
     conv1d = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
     #conv1d_flat = tf.reshape(conv1d, [-1, int(sample_length/kernel_stride)-1])
-    pool1d = tf.layers.max_pooling1d(inputs=conv1d, pool_size=pool_sizes, strides=pool_stride)
+    pool1d = tf.layers.average_pooling1d(inputs=conv1d, pool_size=pool_sizes, strides=pool_stride)
     conv1d_flat = tf.reshape(pool1d, [-1, int(sample_length*feature_maps/pool_sizes) ])
     conv1d_flat = tf.reshape(conv1d_flat, [-1, conv_size])
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
@@ -268,4 +268,4 @@ def run_network(fc , fc2):
   
 import_npy()
 setup()
-run_network(6,480) 
+run_network(6,240)
