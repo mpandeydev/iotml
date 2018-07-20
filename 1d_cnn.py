@@ -20,7 +20,7 @@ step_size           = 0.05
 samplen             = 9000
 batch_size          = 200
  
-ffgenerations         = 15000
+generations         = 15000
 
 sample_length       = 4800
 

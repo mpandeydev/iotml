@@ -5,15 +5,17 @@ import time
 import datetime
 import csv
 
-hidden_layer_nodes = 600
-hidden_layer_nodes_2 = 400
-hidden_layer_nodes_3 = 200
-hidden_layer_nodes_4 = 5
+logit_size = 8
+
+hidden_layer_nodes = 1000
+hidden_layer_nodes_2 = 600
+hidden_layer_nodes_3 = logit_size
+hidden_layer_nodes_4 = 0
 hidden_layer_nodes_5 = 500
 hidden_layer_nodes_6 = 200
 hidden_layer_nodes_7 = 100
 
-hidden_layer_nodes_f = 5 # Must be the same as output logits
+hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
 step_size           = 0.05
  
@@ -30,7 +32,7 @@ kernel_stride       = 10
 feature_maps       = 6
 
 pool_sizes          = 4
-pool_stride         = pool_sizes
+pool_stride         = 4
 
 conv_size           = 104
 
@@ -64,15 +66,15 @@ def activation(layer_input,weights,bias):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../training_data_3d.npy')
+    tdata = np.load('../training_data_3d_unfiltered.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     x_vals = tdata[:,0:3,:]
 
-def setup():
-    global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation
+def setup(dataset):
+    global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation,logit_size
     localtime = time.asctime( time.localtime(time.time()) )
-    print("Start time :", localtime)    
+    print("Start time :", localtime)  
     
     x_vals = np.array([x[0:sample_length] for x in x_vals])
     choice = np.random.choice(len(x_vals), size = samplen)
@@ -91,9 +93,13 @@ def setup():
     test_indices = [0]
     validation_indices = [0]'''
     
-    #y_vals = np.array([x[4800:4805] for x in mag_data]) # 4800:4805 for speed ; 4805:4813 for type if One hot encoded
-    
-    y_vals = np.array([speeds[:]])
+    # Change for datasets
+    if(dataset=="speeds"):
+        logit_size = 5
+        y_vals = np.array([speeds[:]])
+    if(dataset=="types"):
+        logit_size = 8
+        y_vals = np.array([types[:]])
     y_vals = np.array(y_vals[0,np.array(choice)])
     y_vals = y_vals.astype(np.float)
     y_vals = y_vals.astype(np.int32)
@@ -144,20 +150,20 @@ def run_network(fc , fc2):
     filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
          
     # Set up Computation Graph 
-    #conv1d = tf.squeeze(tf.nn.conv1d(value=x_data,filters=filter_1d,stride=kernel_stride,padding="VALID"))
-    conv1d = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
-    #conv1d_flat = tf.reshape(conv1d, [-1, int(sample_length/kernel_stride)-1])
-    pool1d = tf.layers.average_pooling1d(inputs=conv1d, pool_size=pool_sizes, strides=pool_stride)
-    conv1d_flat = tf.reshape(pool1d, [-1, int(sample_length*feature_maps/pool_sizes) ])
-    conv1d_flat = tf.reshape(conv1d_flat, [-1, conv_size])
+    
+    # Convolutional and Pooling Layers
+    
+    #conv1d_1 = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+    #conv1d_1 = tf.layers.max_pooling1d(inputs=conv1d_1, pool_size=pool_sizes, strides=pool_stride)
+    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+    conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
+    
+    # Fully Connected Layers
+    
+    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
-    fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
-    fc_f = tf.layers.dense(fc_3,hidden_layer_nodes_4,activation=tf.nn.relu)
-    '''fc_5 = tf.layers.dense(fc_4,hidden_layer_nodes_5,activation=tf.nn.relu)
-    fc_6 = tf.layers.dense(fc_5,hidden_layer_nodes_6,activation=tf.nn.relu)
-    fc_7 = tf.layers.dense(fc_6,hidden_layer_nodes_7,activation=tf.nn.relu)
-    fc_f = tf.layers.dense(fc_7,hidden_layer_nodes_f,activation=tf.nn.relu)'''
+    fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
     fprob = tf.nn.softmax(fc_f, name=None)
     
     localtime = time.asctime( time.localtime(time.time()) )
@@ -266,6 +272,16 @@ def run_network(fc , fc2):
     
     sess.close()
   
+'''import_npy()
+setup("speeds")
+run_network(15,180)
+sess.close()
+
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.8
+sess = tf.Session(config=config)'''
+
 import_npy()
-setup()
-run_network(6,240)
+setup("types")
+run_network(15,600 )
+sess.close()
