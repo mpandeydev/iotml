@@ -6,12 +6,14 @@ import time
 t_logit_size = 8
 s_logit_size = 5
 
+hidden_layer_nodes = 1000
+
 hidden_layer_nodes_s = 1000
-hidden_layer_nodes_2_s = 600
+hidden_layer_nodes_2_s = 500
 hidden_layer_nodes_3_s = s_logit_size
 
 hidden_layer_nodes_t = 1000
-hidden_layer_nodes_2_t = 600
+hidden_layer_nodes_2_t = 500
 hidden_layer_nodes_3_t = t_logit_size
 
 step_size           = 0.05
@@ -146,13 +148,17 @@ def run_network(fc , fc2):
     
     # Fully Connected Layers
     
-    fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
-    fc_2_s = tf.layers.dense(fc_1_s,hidden_layer_nodes_2_s,activation=tf.nn.relu)
+    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
+    
+    #fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
+    
+    fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu)
     fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu)
     fprob_s = tf.nn.softmax(fc_f_s, name=None)
     
-    fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
-    fc_2_t = tf.layers.dense(fc_1_t,hidden_layer_nodes_2_t,activation=tf.nn.relu)
+    #fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
+    
+    fc_2_t = tf.layers.dense(fc_1  ,hidden_layer_nodes_2_t,activation=tf.nn.relu)
     fc_f_t = tf.layers.dense(fc_2_t,hidden_layer_nodes_3_t,activation=tf.nn.relu)
     fprob_t = tf.nn.softmax(fc_f_t, name=None)
     
