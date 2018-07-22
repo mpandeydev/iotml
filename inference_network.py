@@ -24,18 +24,18 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 15000
+generations         = 1 #15000
 
 sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 10
-feature_maps       = 6
+feature_maps       = 15
 
 pool_sizes          = 4
 pool_stride         = 4
 
-conv_size           = 104
+conv_size           = 2400
 
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
@@ -54,7 +54,6 @@ x_vals_test = []
 y_vals_train = []
 y_vals_validation = []
 y_vals_test = []
-
 #--------------------------------------------------------------------------------------------------------------
 
 # General Activation Function
@@ -127,106 +126,88 @@ def setup():
     print("Setup Complete :", localtime)
 
 #*****************************************************************************
-    
-def run_network(fc , fc2):
-    feature_maps = fc
-    conv_size = fc2
-    print("Parameter is : ",fc )
-    
-     # Placeholders
-    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
-    y_target_s = tf.placeholder(shape=(None), dtype=tf.int32) 
-    y_target_t = tf.placeholder(shape=(None), dtype=tf.int32) 
-    
-    # Change functions from here on out if architecture changes
-         
-    # Set up Computation Graph 
-    
-    # Convolutional and Pooling Layers
-    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv_1d")
-    #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
-    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
-    
-    # Fully Connected Layers
-    
-    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu,name="fc_1")
-    
-    #fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
-    
-    fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu,name="fc_2_s")
-    fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu,name="fc_f_s")
-    fprob_s = tf.nn.softmax(fc_f_s, name="softmax_s")
-    
-    #fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
-    
-    fc_2_t = tf.layers.dense(fc_1  ,hidden_layer_nodes_2_t,activation=tf.nn.relu,name="fc_2_t")
-    tf.cast(fc_2_t,precision)
-    fc_f_t = tf.layers.dense(fc_2_t,hidden_layer_nodes_3_t,activation=tf.nn.relu,name="fc_f_t")
-    tf.cast(fc_f_t,precision)
-    fprob_t = tf.nn.softmax(fc_f_t, name="softmax_t")
-    
-    # Add ops to save and restore all the variables.
-    saver = tf.train.Saver()
-    
-    localtime = time.asctime( time.localtime(time.time()) )
-    print("Graph Defined :", localtime)
-    
-    #*****************************************************************************
-    
-    # Define Loss function
-    
-    speeds_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_s,logits=fc_f_s)
-    types_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_t,logits=fc_f_t)
-    loss = tf.add(speeds_loss,types_loss)
-    
-    # Optimizer function
-    
-    my_opt = tf.train.AdagradOptimizer(step_size)
-    train_step = my_opt.minimize(loss)
-    
-    # Initialize all variables
-    
-    init = tf.global_variables_initializer()
-    sess.run(init)
-    localtime = time.asctime( time.localtime(time.time()) )
-    print("Initialized Variables:", localtime)
-    
-    # Log vectors
-    loss_vec = []
-    test_loss = []
-    
-    # Speeds
-    
-    test_pred_s = []
-    pred_vec_s = []
-    success_rate_s = []
-    successful_guesses_s = []
-    test_rate_s = []    
-    
-    # Types
-    
-    test_pred_t = []
-    pred_vec_t = []
-    success_rate_t = []
-    successful_guesses_t = []
-    test_rate_t = []
-    
-    # Train 
-    
-    for i in range(generations):
-        with tf.Graph().as_default():
-        
-            # Get random batch
+import_npy()
+setup()
+
+ # Placeholders
+x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
+y_target_s = tf.placeholder(shape=(None), dtype=tf.int32) 
+y_target_t = tf.placeholder(shape=(None), dtype=tf.int32) 
+
+# Change functions from here on out if architecture changes
+     
+# Set up Computation Graph 
+
+# Convolutional and Pooling Layers
+conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv_1d")
+#conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
+conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
+
+# Fully Connected Layers
+
+fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu,name="fc_1")
+
+#fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
+
+fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu,name="fc_2_s")
+fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu,name="fc_f_s")
+fprob_s = tf.nn.softmax(fc_f_s, name="softmax_s")
+
+#fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
+
+fc_2_t = tf.layers.dense(fc_1  ,hidden_layer_nodes_2_t,activation=tf.nn.relu,name="fc_2_t")
+tf.cast(fc_2_t,precision)
+fc_f_t = tf.layers.dense(fc_2_t,hidden_layer_nodes_3_t,activation=tf.nn.relu,name="fc_f_t")
+tf.cast(fc_f_t,precision)
+fprob_t = tf.nn.softmax(fc_f_t, name="softmax_t")
+
+speeds_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_s,logits=fc_f_s)
+types_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_t,logits=fc_f_t)
+loss = tf.add(speeds_loss,types_loss)
+
+# Initialize all variables
+
+init = tf.global_variables_initializer()
+sess.run(init)
+localtime = time.asctime( time.localtime(time.time()) )
+print("Initialized Variables:", localtime)
+
+# Log vectors
+loss_vec = []
+test_loss = []
+
+# Speeds
+
+test_pred_s = []
+pred_vec_s = []
+success_rate_s = []
+successful_guesses_s = []
+test_rate_s = []    
+
+# Types
+
+test_pred_t = []
+pred_vec_t = []
+success_rate_t = []
+successful_guesses_t = []
+test_rate_t = []
+
+# Add ops to save and restore all the variables.
+saver = tf.train.Saver()
+# Restore variables from disk.
+saver.restore(sess, "../trained_model.ckpt")
+print("Model restored.")
+for i in range(generations):
+     with tf.Graph().as_default():
             
+         # Get random batch
+                
             rand_index = np.random.choice(len(x_vals_train), size = batch_size)
             rand_x = [x_vals_train[rand_index]]
-            
+                
             rand_y_s = y_vals_train_s[rand_index]
             rand_y_t = y_vals_train_t[rand_index]
             
-            # Training step
-            
-            sess.run(train_step, feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,3)), y_target_s:rand_y_s, y_target_t:rand_y_t})
             temp_loss,pred_training_s,pred_training_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target_s:rand_y_s, y_target_t:rand_y_t} )
             loss_vec.append(temp_loss)
             
@@ -269,74 +250,26 @@ def run_network(fc , fc2):
             test_rate_t.append(test_correct_pred/len(y_vals_test_t))
             test_accuracy_t = round(test_correct_pred*100/len(y_vals_test_t),4)
             
-            
-            
-            # Print updates
-            if (i+1)%100==0:
-                print('Generation: ' + str("{0:0=5d}".format(i+1))) 
-                print('SPEEDS : Training Acc = ' + str((train_accuracy_s))+'. Test Acc = ' + str((test_accuracy_s))) 
-                print('TYPES : Training Acc = ' + str((train_accuracy_t))+'. Test Acc = ' + str((test_accuracy_t))) 
-                print('Loss = '  + str(round(temp_loss,4)))
-                print()
+            print('Generation: ' + str("{0:0=5d}".format(i+1))) 
+            print('SPEEDS : Training Acc = ' + str((train_accuracy_s))+'. Test Acc = ' + str((test_accuracy_s))) 
+            print('TYPES : Training Acc = ' + str((train_accuracy_t))+'. Test Acc = ' + str((test_accuracy_t))) 
+            print('Loss = '  + str(round(temp_loss,4)))
+            print()
         
-    validation_loss,pred_validation_s,pred_validation_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target_s:y_vals_validation_s,y_target_t:y_vals_validation_t})
-    
-    validation_guess_s = np.argmax(pred_validation_s,axis=1)
-    validation_correct_pred_s = np.sum(np.equal(validation_guess_s,y_vals_validation_s))
-    validation_accuracy_s = round(validation_correct_pred_s*100/len(y_vals_validation_s),4)
-    
-    validation_guess_t = np.argmax(pred_validation_t,axis=1)
-    validation_correct_pred_t = np.sum(np.equal(validation_guess_t,y_vals_validation_t))
-    validation_accuracy_t = round(validation_correct_pred_t*100/len(y_vals_validation_t),4)
-    
-    print("Validation Accuracies:")
-    print("SPEEDS : ",str(validation_accuracy_s))
-    print("TYPES : ",str(validation_accuracy_t))
-    # Plot values
-    localtime = time.asctime( time.localtime(time.time()) )
-    
-    save_path = saver.save(sess, "../trained_model.ckpt")
-    print("Model saved in path: %s" % save_path)
-    
-    print("End time :", localtime)
-    
-    
-    plt.plot(loss_vec, 'k-', label='Train Loss')
-    plt.plot(test_loss, 'r--', label='Test Loss')
-    plt.title('Loss (MSE) per Generation')
-    plt.xlabel('Generation')
-    plt.ylabel('Loss')
-    plt.legend(loc='upper right')
-    plt.show()
-    
-    plt.plot(success_rate_s, 'r--', label='Training Success rate')
-    plt.plot(test_rate_s, 'b--', label='Test Success rate')
-    plt.title('Speeds Accuracy')
-    plt.xlabel('Generation')
-    plt.ylabel('Success Rate')
-    plt.legend(loc='upper right')
-    plt.show()
+validation_loss,pred_validation_s,pred_validation_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target_s:y_vals_validation_s,y_target_t:y_vals_validation_t})
 
-    plt.plot(success_rate_t, 'r--', label='Training Success rate')
-    plt.plot(test_rate_t, 'b--', label='Test Success rate')
-    plt.title('Types Accuracy')
-    plt.xlabel('Generation')
-    plt.ylabel('Success Rate')
-    plt.legend(loc='upper right')
-    plt.show()
-    
-    sess.close()
-  
-'''import_npy()
-setup("speeds")
-run_network(15,180)
+validation_guess_s = np.argmax(pred_validation_s,axis=1)
+validation_correct_pred_s = np.sum(np.equal(validation_guess_s,y_vals_validation_s))
+validation_accuracy_s = round(validation_correct_pred_s*100/len(y_vals_validation_s),4)
+
+validation_guess_t = np.argmax(pred_validation_t,axis=1)
+validation_correct_pred_t = np.sum(np.equal(validation_guess_t,y_vals_validation_t))
+validation_accuracy_t = round(validation_correct_pred_t*100/len(y_vals_validation_t),4)
+
+print("Validation Accuracies:")
+print("SPEEDS : ",str(validation_accuracy_s))
+print("TYPES : ",str(validation_accuracy_t))
+# Plot values
 sess.close()
-
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.8
-sess = tf.Session(config=config)'''
-
-import_npy()
-setup()
-run_network(15,2400)
-sess.close()
+            
+            
