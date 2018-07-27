@@ -28,6 +28,8 @@ from tensorflow.python.platform import flags
 
 FLAGS = None
 
+#filename = "../trained_model.ckpt"
+filename = "../quantized_model.ckpt"
 
 def print_tensors_in_checkpoint_file(file_name, tensor_name, all_tensors,
                                      all_tensor_names=False):
@@ -108,8 +110,8 @@ def main(unused_argv):
           "[--printoptions]")
     sys.exit(1)
   else:'''
-  print_tensors_in_checkpoint_file(file_name="../trained_model.ckpt",tensor_name=None,
-                                     all_tensors=True, all_tensor_names=True)
+  print_tensors_in_checkpoint_file(file_name=filename,tensor_name=None,
+                                     all_tensors=False, all_tensor_names=True)
 
 
 if __name__ == "__main__":

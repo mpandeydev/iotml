@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-precision = tf.float16
+precision = tf.float32
 
 t_logit_size = 8
 s_logit_size = 5
@@ -30,7 +30,7 @@ sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 10
-feature_maps       = 6
+feature_maps        = 6
 
 pool_sizes          = 4
 pool_stride         = 4
@@ -160,9 +160,7 @@ def run_network(fc , fc2):
     #fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
     
     fc_2_t = tf.layers.dense(fc_1  ,hidden_layer_nodes_2_t,activation=tf.nn.relu,name="fc_2_t")
-    tf.cast(fc_2_t,precision)
     fc_f_t = tf.layers.dense(fc_2_t,hidden_layer_nodes_3_t,activation=tf.nn.relu,name="fc_f_t")
-    tf.cast(fc_f_t,precision)
     fprob_t = tf.nn.softmax(fc_f_t, name="softmax_t")
     
     # Add ops to save and restore all the variables.

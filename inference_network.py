@@ -1,9 +1,9 @@
 import tensorflow as tf
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-precision = tf.float16
+precision = tf.float32
 
 t_logit_size = 8
 s_logit_size = 5
@@ -20,11 +20,11 @@ hidden_layer_nodes_3_t = t_logit_size
 
 step_size           = 0.05
  
-samplen             = 9000
-batch_size          = 200
+samplen             = 9005
+batch_size          = 500
 input_channels      = 3
  
-generations         = 1 #15000
+generations         = 10
 
 sample_length       = 1600
 
@@ -37,9 +37,10 @@ pool_stride         = 4
 
 conv_size           = 2400
 
+thisgraph = tf.Graph()
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
-sess = tf.Session(config=config)
+sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
 x_vals = []
 y_vals = []
@@ -83,10 +84,7 @@ def setup():
     x_vals = x_vals.astype(np.float32)
     x_vals = tf.keras.utils.normalize(x_vals,axis=-1,order=2)
     
-    train_indices = np.random.choice(len(x_vals), round(len(x_vals)*0.8), replace=False)
-    rem = np.array(list(set(range(len(x_vals))) - set(train_indices)))
-    validation_indices = np.random.choice(len(rem), round(len(rem)*0.5), replace=False)
-    test_indices = np.array(list(set(range(len(rem))) - set(validation_indices)))
+    train_indices = np.random.choice(len(x_vals), round(len(x_vals)*1), replace=False)
  
     y_vals_s = np.array([speeds[:]])
     y_vals_s = np.array(y_vals_s[0,np.array(choice)])
@@ -108,17 +106,9 @@ def setup():
     
     # 80:10:10 data split and normalization
     
-    x_vals_train = x_vals[train_indices]
-    x_vals_validation = x_vals[validation_indices]
-    x_vals_test = x_vals[test_indices]
-    
-    y_vals_train_s = y_vals_s[train_indices]
-    y_vals_validation_s = y_vals_s[validation_indices]
-    y_vals_test_s = y_vals_s[test_indices]
-    
+    x_vals_train = x_vals[train_indices]    
+    y_vals_train_s = y_vals_s[train_indices]    
     y_vals_train_t = y_vals_t[train_indices]
-    y_vals_validation_t = y_vals_t[validation_indices]
-    y_vals_test_t = y_vals_t[test_indices]
     
     # Declare batch size and placeholders
         
@@ -141,16 +131,20 @@ y_target_t = tf.placeholder(shape=(None), dtype=tf.int32)
 # Convolutional and Pooling Layers
 conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv_1d")
 #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
-conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
-
+conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size],)
+tf.cast(conv1d_flat,precision)
+#cmin = tf.reduce_max(conv1d_flat)
 # Fully Connected Layers
 
 fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu,name="fc_1")
+tf.cast(fc_1,precision)
 
 #fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
 
 fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu,name="fc_2_s")
+tf.cast(fc_2_s,precision)
 fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu,name="fc_f_s")
+tf.cast(fc_2_s,precision)
 fprob_s = tf.nn.softmax(fc_f_s, name="softmax_s")
 
 #fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)
@@ -164,7 +158,8 @@ fprob_t = tf.nn.softmax(fc_f_t, name="softmax_t")
 speeds_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_s,logits=fc_f_s)
 types_loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target_t,logits=fc_f_t)
 loss = tf.add(speeds_loss,types_loss)
-
+qsaver = tf.train.Saver()
+tf.contrib.quantize.create_eval_graph(thisgraph)
 # Initialize all variables
 
 init = tf.global_variables_initializer()
@@ -195,10 +190,35 @@ test_rate_t = []
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
 # Restore variables from disk.
-saver.restore(sess, "../trained_model.ckpt")
+saver.restore(sess, "../quantized_model.ckpt")
 print("Model restored.")
+
+def quantize_layer(layer_name):
+    layer_max = []
+    layer_min = []
+    layer_weights_list = sess.run(layer_name)
+    for lex in layer_weights_list:
+        lex = lex.flatten()
+        layer_max.append(max(lex))
+        layer_min.append(min(lex))
+    ultimax = max(layer_max)
+    ultimin = min(layer_min)
+    return tf.convert_to_tensor(ultimax),tf.convert_to_tensor(ultimin)
+
+conv1d_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'conv_1d')
+fc_1_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc_1')
+fc_2_s_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc_2_s')
+fc_f_s_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc_f_s')
+fprob_s_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'softmax_s')
+fc_2_t_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc_2_t')
+fc_f_t_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'fc_f_t')
+fprob_t_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'softmax_t')
+all_weights = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+
+max_range, min_range = quantize_layer(conv1d_w)
+
 for i in range(generations):
-     with tf.Graph().as_default():
+     with thisgraph.as_default():
             
          # Get random batch
                 
@@ -211,7 +231,7 @@ for i in range(generations):
             temp_loss,pred_training_s,pred_training_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target_s:rand_y_s, y_target_t:rand_y_t} )
             loss_vec.append(temp_loss)
             
-            temp_loss,pred_training_s,pred_training_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target_s:y_vals_train_s, y_target_t:y_vals_train_t} )
+            #temp_loss,pred_training_s,pred_training_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_train]).reshape((9005,sample_length,input_channels)), y_target_s:y_vals_train_s, y_target_t:y_vals_train_t} )
             
             guess_s = np.argmax(pred_training_s,axis=1)
             guess_t = np.argmax(pred_training_t,axis=1)
@@ -219,57 +239,42 @@ for i in range(generations):
             pred_vec_s.append(guess_s)
             pred_vec_t.append(guess_t)
             
-            correct_pred_s = np.sum(np.equal(guess_s,y_vals_train_s))
-            correct_pred_t = np.sum(np.equal(guess_t,y_vals_train_t))
+            correct_pred_s = np.sum(np.equal(guess_s,rand_y_s))
+            correct_pred_t = np.sum(np.equal(guess_t,rand_y_t))
             
             
             successful_guesses_s.append(correct_pred_s)
             successful_guesses_t.append(correct_pred_t)
             
-            success_rate_t.append(correct_pred_t/len(x_vals_train) )
-            train_accuracy_t = round(correct_pred_t*100/len(x_vals_train),4)
+            success_rate_t.append(correct_pred_t/len(rand_y_t) )
+            train_accuracy_t = round(correct_pred_t*100/len(rand_y_t),4)
             
-            success_rate_s.append(correct_pred_s/len(x_vals_train) )
-            train_accuracy_s = round(correct_pred_s*100/len(x_vals_train),4)
+            success_rate_s.append(correct_pred_s/len(rand_y_t) )
+            train_accuracy_s = round(correct_pred_s*100/len(rand_y_t),4)
             
-            # Get testing loss
-   
-            test_temp_loss,pred_testing_s,pred_testing_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), y_target_s:y_vals_test_s, y_target_t:y_vals_test_t})
             
-            test_loss.append(test_temp_loss)
-            
-            test_pred_s.append(pred_testing_s)
-            test_guess = np.argmax(pred_testing_s,axis=1)
-            test_correct_pred = np.sum(np.equal(test_guess,y_vals_test_s))
-            test_rate_s.append(test_correct_pred/len(y_vals_test_s))
-            test_accuracy_s = round(test_correct_pred*100/len(y_vals_test_s),4)
-            
-            test_pred_t.append(pred_testing_t)
-            test_guess = np.argmax(pred_testing_t,axis=1)
-            test_correct_pred = np.sum(np.equal(test_guess,y_vals_test_t))
-            test_rate_t.append(test_correct_pred/len(y_vals_test_t))
-            test_accuracy_t = round(test_correct_pred*100/len(y_vals_test_t),4)
-            
-            print('Generation: ' + str("{0:0=5d}".format(i+1))) 
-            print('SPEEDS : Training Acc = ' + str((train_accuracy_s))+'. Test Acc = ' + str((test_accuracy_s))) 
-            print('TYPES : Training Acc = ' + str((train_accuracy_t))+'. Test Acc = ' + str((test_accuracy_t))) 
+            '''print('Generation: ' + str("{0:0=5d}".format(i+1))) 
+            print('SPEEDS : Inference Acc = ' + str((train_accuracy_s))) 
+            print('TYPES : Inference Acc = ' + str((train_accuracy_t))) 
             print('Loss = '  + str(round(temp_loss,4)))
-            print()
-        
-validation_loss,pred_validation_s,pred_validation_t = sess.run([loss,fprob_s,fprob_t], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target_s:y_vals_validation_s,y_target_t:y_vals_validation_t})
+            print()'''
 
-validation_guess_s = np.argmax(pred_validation_s,axis=1)
-validation_correct_pred_s = np.sum(np.equal(validation_guess_s,y_vals_validation_s))
-validation_accuracy_s = round(validation_correct_pred_s*100/len(y_vals_validation_s),4)
+accuracy_mean_s = np.mean(success_rate_s)
+accuracy_stdev_s = np.std(success_rate_s)
+print("SPEEDS : Mean = ",round(accuracy_mean_s,4)," Std Dev = ",round(accuracy_stdev_s,4))
+accuracy_mean_t = np.mean(success_rate_t)
+accuracy_stdev_t = np.std(success_rate_t)
+print("TYPES : Mean = ",round(accuracy_mean_t,4)," Std Dev = ",round(accuracy_stdev_t,4))
 
-validation_guess_t = np.argmax(pred_validation_t,axis=1)
-validation_correct_pred_t = np.sum(np.equal(validation_guess_t,y_vals_validation_t))
-validation_accuracy_t = round(validation_correct_pred_t*100/len(y_vals_validation_t),4)
-
-print("Validation Accuracies:")
-print("SPEEDS : ",str(validation_accuracy_s))
-print("TYPES : ",str(validation_accuracy_t))
 # Plot values
+'''plt.hist(success_rate_s,bins=10)
+plt.title('Speeds Accuracies')
+plt.show()
+
+plt.hist(success_rate_t,bins=10)
+plt.title('Types Accuracies')
+plt.show()'''
+
 sess.close()
             
             
