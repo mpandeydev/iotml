@@ -8,6 +8,8 @@ precision = tf.float32
 t_logit_size = 8
 s_logit_size = 5
 
+model = "../quantized_model_perlayer_10.ckpt"
+
 hidden_layer_nodes = 900
 
 #hidden_layer_nodes_s = 1000
@@ -24,7 +26,7 @@ samplen             = 9005
 batch_size          = 500
 input_channels      = 3
  
-generations         = 10
+generations         = 1000
 
 sample_length       = 1600
 
@@ -190,7 +192,7 @@ test_rate_t = []
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
 # Restore variables from disk.
-saver.restore(sess, "../quantized_model.ckpt")
+saver.restore(sess, model)
 print("Model restored.")
 
 def quantize_layer(layer_name):

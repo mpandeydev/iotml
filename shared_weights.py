@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-precision = tf.float32
+precision = tf.float16
 
 t_logit_size = 8
 s_logit_size = 5
@@ -70,7 +70,8 @@ def import_npy():
     tdata = np.load('../training_data_3d.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
-    x_vals = tdata[:,0:3,:]
+    #x_vals = tdata[:,0:3,:]
+    x_vals = np.load('../quantized_dataset.npy')
 
 def setup():
     global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test_t, y_vals_train_t, y_vals_validation_t,y_vals_test_s, y_vals_train_s, y_vals_validation_s,logit_size,saver

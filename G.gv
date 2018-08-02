@@ -1,0 +1,22 @@
+digraph G {
+	graph [color=white fillcolor=white fontcolor="#414141" style=rounded]
+	node [color="#aaaaaa" fillcolor=white fontcolor="#414141" penwidth=2 style=filled]
+	edge [arrowsize=1.2 color="#aaaaaa" fontcolor="#414141" penwidth=2.5]
+	Placeholder [label=Placeholder]
+	Placeholder_1 [label=Placeholder_1]
+	Const [label=Const]
+	Reshape [label=Reshape]
+	conv1d_f [label=conv1d_f]
+	Reshape_1 [label=Reshape_1]
+	dense [label=dense]
+	dense_1 [label=dense_1]
+	dense_2 [label=dense_2]
+	Softmax [label=Softmax]
+	Const -> Reshape [label=8]
+	Placeholder -> conv1d_f [label="?×1600×3"]
+	conv1d_f -> Reshape_1
+	Reshape_1 -> dense [label="?×2400"]
+	dense -> dense_1
+	dense_1 -> dense_2
+	dense_2 -> Softmax
+}

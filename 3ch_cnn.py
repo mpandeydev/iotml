@@ -10,10 +10,6 @@ logit_size = 8
 hidden_layer_nodes = 1000
 hidden_layer_nodes_2 = 600
 hidden_layer_nodes_3 = logit_size
-hidden_layer_nodes_4 = 0
-hidden_layer_nodes_5 = 500
-hidden_layer_nodes_6 = 200
-hidden_layer_nodes_7 = 100
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
@@ -61,6 +57,26 @@ y_vals_test = []
 def activation(layer_input,weights,bias):
     return tf.nn.relu(tf.add(tf.matmul(layer_input,weights),bias))
 
+# Quantization Function
+    
+def quantize_tensor(input_tensor,bits):
+    
+    converted_array = []
+    
+    input_array = sess.run(input_tensor)
+    max_value = (np.amax(input_array)) 
+    print("Maximum Value in tensor is : ",max_value)
+    min_value = (np.amin(input_array))
+    quantum = max_value-min_value/(2**bits)
+    input_array_flat = input_array.flatten()
+    
+    for i in input_array_flat:
+        converted_array.append(np.float16((((i-min_value)/(max_value-min_value))*2**bits)-2**(bits-1)*quantum))
+    
+    converted_array = np.asarray(converted_array)
+    converted_array = np.reshape(converted_array,np.shape(input_array))
+    converted_array = tf.convert_to_tensor(converted_array,dtype=tf.float16)
+    return tf.assign(input_tensor,converted_array)
 
 #--------------------------------------------------------------------------------------------------------------
 
@@ -146,7 +162,7 @@ def run_network(fc , fc2):
 
     #conv2 = tf.nn.conv1d(x_data,filterz, stride=2, padding="VALID")
     filter_1d = np.array(np.random.rand(filter_width))
-    filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float32)
+    filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float16)
     filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
          
     # Set up Computation Graph 
@@ -271,15 +287,6 @@ def run_network(fc , fc2):
     plt.show()
     
     sess.close()
-  
-'''import_npy()
-setup("speeds")
-run_network(15,180)
-sess.close()
-
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.8
-sess = tf.Session(config=config)'''
 
 import_npy()
 setup("types")
