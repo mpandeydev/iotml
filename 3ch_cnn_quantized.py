@@ -9,10 +9,11 @@ import csv
 import os
 os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
+precision = tf.float32
 logit_size = 8
 
 hidden_layer_nodes = 900
-hidden_layer_nodes_2 = 900
+hidden_layer_nodes_2 = 400
 hidden_layer_nodes_3 = logit_size
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
@@ -65,24 +66,25 @@ def activation(layer_input,weights,bias):
     
 def quantize_tensor(input_tensor):
     bits = 8
+    full_range = 2**bits
     converted_array = []
     
     input_array = sess.run(input_tensor)
-    max_value = (np.amax(input_array)) 
-    print("Maximum Value in tensor is : ",max_value)
-    min_value = (np.amin(input_array))
-    print("Minimum Value in tensor is : ",min_value)
-    quantum = (max_value-min_value)/(2**bits)
-    #print("Quantum is : ",quantum)
-    print()
+    max_value = np.float16(np.amax(input_array)) 
+    min_value = np.float16(np.amin(input_array))
+    quantum = np.float16((max_value-min_value)/full_range)
+    quantas = []
+    for i in range(0,full_range):
+            quantas.append(np.float16(i*quantum)+min_value)
     input_array_flat = input_array.flatten()
     
     for i in input_array_flat:
-        converted_array.append(np.float32(np.int8((((i-min_value)/(max_value-min_value))*2**bits)-2**(bits-1))*quantum))
+        intval = np.uint8(np.rint(((i-min_value)/(max_value-min_value))*full_range))
+        converted_array.append(quantas[intval])
     
     converted_array = np.asarray(converted_array)
     converted_array = np.reshape(converted_array,np.shape(input_array))
-    converted_array_t = tf.convert_to_tensor(converted_array,dtype=tf.float32)
+    converted_array_t = tf.convert_to_tensor(converted_array,dtype=precision)
     assign_op = tf.assign(input_tensor,converted_array_t)
     sess.run(assign_op)
     return converted_array
@@ -94,8 +96,9 @@ def import_npy():
     tdata = np.load('../training_data_3d.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
-    x_vals = x_vals = tdata[:,0:3,:]
-
+    #x_vals = x_vals = tdata[:,0:3,:]
+    x_vals = np.load('../dataset_quantized.npy')
+    
 def setup(dataset):
     global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation,logit_size
     localtime = time.asctime( time.localtime(time.time()) )
@@ -171,10 +174,10 @@ def run_network(fc , fc2):
 
     conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
     #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
+    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
     
     # Fully Connected Layers
     
-    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
     fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
@@ -195,7 +198,6 @@ def run_network(fc , fc2):
 # Optimizer function
     
     my_opt = tf.train.AdagradOptimizer(step_size)
-    #my_opt = tf.train.AdagradOptimizer(step_size)
     train_step = my_opt.minimize(loss)
     
 # Initialize all variables
@@ -214,13 +216,14 @@ def run_network(fc , fc2):
     success_rate = []
     successful_guesses = []
     test_rate = []
+    
     # Train 
 
     
     for i in range(generations):
         
         #print(tf.GraphKeys.GLOBAL_VARIABLES)
-        # Get random batch
+        #Get random batch
         
         rand_index = np.random.choice(len(x_vals_train), size = batch_size)
         rand_x = [x_vals_train[rand_index]]
@@ -253,12 +256,26 @@ def run_network(fc , fc2):
         test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
         
         # Print updates
-        if (i+1)%500==0:
-            qweights = quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0'))
-            qweights = quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0'))
-            qweights = quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0'))
-            qweights = quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0'))
-            weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0'))
+        if (i+1)%5000==0:
+            qweights = []
+            weights = []
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
+            
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+            weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
             
             temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
             guess = np.argmax(get_pred,axis=1)
@@ -308,8 +325,10 @@ def run_network(fc , fc2):
     return weights,qweights
 
 import_npy()
-setup("speeds")
+setup("types")
 weights,weights_q = run_network(15,2400)
-num_w = np.unique(weights)
-num_q = np.unique(weights_q)
+#num_w = np.unique(weights)
+#num_q = np.unique(weights_q)
+for i in weights:
+    print(len(np.unique(i)))
 sess.close()
