@@ -12,9 +12,9 @@ os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 precision = tf.float32
 logit_size = 8
 
-hidden_layer_nodes = 800
+hidden_layer_nodes = 900
 hidden_layer_nodes_2 = 400
-hidden_layer_nodes_3 = 200
+hidden_layer_nodes_3 = logit_size
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
@@ -24,18 +24,20 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 15000
+generations         = 500
 
 sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 10
-feature_maps        = 6
+feature_maps       = 6
 
 pool_sizes          = 4
 pool_stride         = 4
 
 conv_size           = 104
+
+quantize_on     = True
 
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
@@ -65,6 +67,10 @@ def activation(layer_input,weights,bias):
 # Quantization Function
     
 def quantize_tensor(input_tensor):
+
+    #if(quantize_on == False):
+        #return input_tensor
+    
     bits = 8
     full_range = 2**bits
     converted_array = []
@@ -174,14 +180,13 @@ def run_network(fc , fc2):
 
     conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
     #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
-    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])
+    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])#How is conv_size known?
     
     # Fully Connected Layers
     
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
-    fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
-    fc_f = tf.layers.dense(fc_3,hidden_layer_nodes_f,activation=tf.nn.relu)
+    fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
     fprob = tf.nn.softmax(fc_f, name=None)
     
     localtime = time.asctime( time.localtime(time.time()) )
@@ -193,7 +198,7 @@ def run_network(fc , fc2):
     
 # Define Loss function
     
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f)
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f)#Why fc_f and not fprob?
     #loss = tf.losses.softmax_cross_entropy(onehot_labels=y_target,logits=final_out)
     
 # Optimizer function
@@ -222,32 +227,41 @@ def run_network(fc , fc2):
 
     
     for i in range(generations):
+
+        if(i % 100 == 0):
+            localtime = time.asctime( time.localtime(time.time()) )
+            print("Epoch %d start time:" % i, localtime)
+
+        dataset_size = len(x_vals)
+
+        num_iters = dataset_size//batch_size
+
+        for iter in range(num_iters):
+
+            #Get random batch
+            #rand_x shape (1, batch_size, 3, 1600)
+            #rand_y shape (batch_size,)
+            rand_index = np.random.choice(len(x_vals_train), size = batch_size)
+            rand_x = [x_vals_train[rand_index]]
+            rand_y = y_vals_train[rand_index]
+
+            # Training step
+            _, temp_loss,get_pred = sess.run([train_step,loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
+            loss_vec.append(temp_loss)
+
+        #After the epoch is done, calculate loss, training, validation, test accuracy
+        #At the end the following are plotted loss_vec, test_loss, success_rate, test_rate
         
-        #print(tf.GraphKeys.GLOBAL_VARIABLES)
-        #Get random batch
-        
-        rand_index = np.random.choice(len(x_vals_train), size = batch_size)
-        rand_x = [x_vals_train[rand_index]]
-        rand_y = y_vals_train[rand_index]
-        #rand_x = sess.run(tf.reshape(rand_x,[1,4800,1]))
-        
-        # Training step
-        
-        sess.run(train_step, feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,3)), y_target:rand_y})
-        temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
-        loss_vec.append(temp_loss)
-        
-        #x_vals_train = sess.run(tf.reshape(x_vals_train,[7200,4800,1]))
+        #Training related loss and prediction
         temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
+        loss_vec.append(temp_loss)
         guess = np.argmax(get_pred,axis=1)
-        pred_vec.append(guess)
         correct_pred = np.sum(np.equal(guess,y_vals_train))
         successful_guesses.append(correct_pred)
         success_rate.append(correct_pred/len(x_vals_train) )
         train_accuracy = round(correct_pred*100/len(x_vals_train),4)
         
         # Get testing loss
-        #x_vals_test = sess.run(tf.reshape(x_vals_test,[900,4800,1]))
         test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), y_target:y_vals_test})
         test_loss.append(test_temp_loss)
         test_pred.append(predict)
@@ -257,20 +271,12 @@ def run_network(fc , fc2):
         test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
         
         # Print updates
-        if (i+1)%50==0:
+        #if (i+1)%500==0:
+        if True:
+            
             qweights = []
             weights = []
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_3.name)[0] + '/kernel:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_3.name)[0] + '/bias:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
-            qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
-            
+            '''
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
@@ -279,6 +285,7 @@ def run_network(fc , fc2):
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
             weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
+             
             
             temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
             guess = np.argmax(get_pred,axis=1)
@@ -289,23 +296,61 @@ def run_network(fc , fc2):
             test_guess = np.argmax(predict,axis=1)
             test_correct_pred = np.sum(np.equal(test_guess,y_vals_test))
             test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
+            '''
         
             #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
             #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
             #localtime = time.asctime( time.localtime(time.time()) )
             #time_now = datetime.datetime.now().time()
-            print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
-        
+            
+
+        validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target:y_vals_validation})
+        validation_guess = np.argmax(validation_predict,axis=1)
+        validation_correct_pred = np.sum(np.equal(validation_guess,y_vals_validation))
+        validation_accuracy = round(validation_correct_pred*100/len(y_vals_validation),4)
+        print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
+        print("Validation Accuracy = "+str(validation_accuracy))
+        print()
+        # Plot values
+        localtime = time.asctime( time.localtime(time.time()) )
+        #print("End time :", localtime)
+    
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
+
+    #Training related loss and prediction
+    temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
+    loss_vec.append(temp_loss)
+    guess = np.argmax(get_pred,axis=1)
+    correct_pred = np.sum(np.equal(guess,y_vals_train))
+    successful_guesses.append(correct_pred)
+    success_rate.append(correct_pred/len(x_vals_train) )
+    train_accuracy = round(correct_pred*100/len(x_vals_train),4)
+    
+    # Get testing loss
+    test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), y_target:y_vals_test})
+    test_loss.append(test_temp_loss)
+    test_pred.append(predict)
+    test_guess = np.argmax(predict,axis=1)
+    test_correct_pred = np.sum(np.equal(test_guess,y_vals_test))
+    test_rate.append(test_correct_pred/len(y_vals_test))
+    test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)    
+
     validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target:y_vals_validation})
     validation_guess = np.argmax(validation_predict,axis=1)
     validation_correct_pred = np.sum(np.equal(validation_guess,y_vals_validation))
     validation_accuracy = round(validation_correct_pred*100/len(y_vals_validation),4)
-    
+    print("QUANTIZED")
+    print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
     print("Validation Accuracy = "+str(validation_accuracy))
-    # Plot values
-    localtime = time.asctime( time.localtime(time.time()) )
-    print("End time :", localtime)
     
+    print("___________________________________________________________")
     
     plt.plot(loss_vec, 'k-', label='Train Loss')
     plt.plot(test_loss, 'r--', label='Test Loss')
@@ -328,7 +373,7 @@ def run_network(fc , fc2):
     return weights,qweights
 
 import_npy()
-setup("types")
+setup("speeds")
 weights,weights_q = run_network(15,2400)
 #num_w = np.unique(weights)
 #num_q = np.unique(weights_q)

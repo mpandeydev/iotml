@@ -4,9 +4,8 @@ Created on Sun Jul 29 19:32:23 2018
 
 @author: satya
 """
-import tensorflow as tf
 import numpy as np
-import time
+import matplotlib.pyplot as plt
 
 def import_npy():
     global x_vals,speeds,types
@@ -33,6 +32,31 @@ def import_npy():
     
     quantized_x_vals = np.asarray(quantized_x_vals)
     quantized_x_vals = np.reshape(quantized_x_vals,np.shape(x_vals))
-    return min_value, max_value,quantized_x_vals
+    return quantas,min_value, max_value,quantized_x_vals
     
-minin,maxin,quantized_input = import_npy()
+quantas,minin,maxin,quantized_input = import_npy()
+tdata = np.load('../training_data_3d.npy')
+
+def plot_values(index,axis,ranges):
+    global quantized_input,tdata,quantas
+    
+    selmin = min(quantized_input[index,axis,ranges])
+    selmax = max(quantized_input[index,axis,ranges])
+    min_index = quantas.index(selmin)
+    max_index = quantas.index(selmax)
+    sel_quantas = quantas[min_index:max_index+1]
+    length = len(ranges)
+    
+    for i in sel_quantas:
+        plt.plot([i]*length,'y')
+    plt.plot(tdata[index,axis,ranges], 'b')
+    plt.title('Non Quantized Training Data')
+    plt.show()
+
+    for i in sel_quantas:
+        plt.plot([i]*length,'y')    
+    plt.plot(quantized_input[index,axis,ranges], 'g')
+    plt.title('Quantized Training Data')
+    plt.show()
+    
+plot_values(403,2,range(0,1600))
