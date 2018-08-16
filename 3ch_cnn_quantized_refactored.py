@@ -13,31 +13,31 @@ precision = tf.float32
 logit_size = 8
 
 hidden_layer_nodes = 900
-hidden_layer_nodes_2 = 500
-#hidden_layer_nodes_3 = 100
+hidden_layer_nodes_2 = 450
+hidden_layer_nodes_3 = 100
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
-step_size           = 0.02
+step_size           = 0.015
  
 samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 1500
-loss_limit          = 0.075
+generations         = 10
+loss_limit          = 0.2
 
 sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 10
-feature_maps        = 5
+feature_maps        = 6
 
 pool_sizes          = 4
 pool_stride         = 4
 
 conv_size           = 104
-quantize_train      = 4
+quantize_train      = 1
 
 quantize_on     = True
 
@@ -68,12 +68,12 @@ def activation(layer_input,weights,bias):
 
 # Quantization Function
     
-def quantize_tensor(input_tensor,bits_q):
+def quantize_tensor(input_tensor):
 
     #if(quantize_on == False):
         #return input_tensor
     
-    bits = bits_q
+    bits = 8
     full_range = 2**bits
     converted_array = []
     
@@ -102,11 +102,9 @@ def quantize_tensor(input_tensor,bits_q):
 def import_npy():
     global x_vals,speeds,types
     tdata = np.load('../training_data_3d.npy')
-    print(np.size(tdata))
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     #x_vals = x_vals = tdata[:,0:3,:]
-    #x_vals = np.load('../q_input.npy')
     x_vals = np.load('../dataset_quantized.npy')
     
 def setup(dataset):
@@ -161,14 +159,10 @@ def setup(dataset):
     print("Setup Complete :", localtime)
 
 #*****************************************************************************
-def print_trainable_variables(train_variables):
-    for v in train_variables:
-        print(v.name)
-        
-def run_network():
-    #feature_maps = feature_maps
-    conv_size = 160*feature_maps
-    #print("Parameter is : ",fc )
+def define_network(fmaps, conv_size):
+    feature_maps = fmaps
+    conv_size = conv_size
+    print("Parameter is : ",feature_maps )
      # Placeholders
     x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
     y_target = tf.placeholder(shape=(None), dtype=tf.int32)
@@ -185,17 +179,17 @@ def run_network():
     
     # Convolutional and Pooling Layers
 
-    #conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
-    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
+    #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
     conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])#How is conv_size known?
     
     # Fully Connected Layers
     
     fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
-    #fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
-    fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_f,activation=tf.nn.relu)
-    fprob = tf.nn.softmax(fc_f)
+    fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
+    fc_f = tf.layers.dense(fc_3,hidden_layer_nodes_f,activation=tf.nn.relu)
+    fprob = tf.nn.softmax(fc_f, name=None)
     
     localtime = time.asctime( time.localtime(time.time()) )
     print("Graph Defined :", localtime)
@@ -203,8 +197,6 @@ def run_network():
     #g = tfg.board(tf.get_default_graph())
     #g.view()
     #*****************************************************************************
-    
-    saver = tf.train.Saver()
     
 # Define Loss function
     
@@ -214,35 +206,7 @@ def run_network():
 # Optimizer function
     
     my_opt = tf.train.AdagradOptimizer(step_size)
-    
-    # First quantization cycle
-    train_vars = tf.trainable_variables() 
-    train_step = my_opt.minimize(loss,var_list=train_vars)
-    
-    # Second quantization cycle
-    train_vars.remove(tf.get_variable('conv1d_f/bias',[feature_maps]))
-    train_vars.remove(tf.get_variable('conv1d_f/kernel',[filter_width,3,feature_maps]))
-    train_step_5 = my_opt.minimize(loss,var_list = train_vars)
-    
-    # Fifth quantization cycle
-    train_vars.remove(tf.get_variable('dense/bias',[hidden_layer_nodes]))
-    train_vars.remove(tf.get_variable('dense/kernel',[conv_size,hidden_layer_nodes]))
-    train_step_4 = my_opt.minimize(loss,var_list = train_vars)
-    
-    # Fourth quantization cycle
-    train_vars.remove(tf.get_variable('dense_1/bias',[hidden_layer_nodes_2]))
-    train_vars.remove(tf.get_variable('dense_1/kernel',[hidden_layer_nodes,hidden_layer_nodes_2]))
-    train_step_3 = my_opt.minimize(loss,var_list = train_vars)
-    
-    # Third quantization cycle
-    #train_vars.remove(tf.get_variable('dense_2/bias',[hidden_layer_nodes_3]))
-    #train_vars.remove(tf.get_variable('dense_2/kernel',[hidden_layer_nodes_2,hidden_layer_nodes_3]))
-    #train_step_2 = my_opt.minimize(loss,var_list = train_vars)
-    
-    # Second quantization cycle
-    #train_vars.remove(tf.get_variable('dense_3/bias',[logit_size]))
-    #train_vars.remove(tf.get_variable('dense_3/kernel',[hidden_layer_nodes_3,logit_size]))
-    #train_step_1 = my_opt.minimize(loss,var_list = train_vars)
+    train_step = my_opt.minimize(loss)
     
 # Initialize all variables
     
@@ -251,12 +215,16 @@ def run_network():
     localtime = time.asctime( time.localtime(time.time()) )
     print("Initialized Variables:", localtime)
     
+    run_network(loss, train_step ,fprob)
+    
+def run_network(tsetp , final_layer):
+    
     # Log vectors
     
     loss_vec = []
     test_loss = []
     test_pred = []
-    #pred_vec = []
+    pred_vec = []
     success_rate = []
     successful_guesses = []
     test_rate = []
@@ -266,21 +234,12 @@ def run_network():
     temp_loss_t = 1
     i = 0
     # Train 
-    qweights = []
-    weights = []
-    
-    order = [conv1d_f,fc_1,fc_2,fc_f]
-    optimizer_order = [train_step,train_step_5,train_step_4,train_step_3]
     
     for h in range(quantize_train):
-        print( )
         print("Quantize Train Loop iteration : ",h)
-        print( )
-        print_trainable_variables(train_vars)
-        print( )
-        i = 0
+        
         for i in range(generations):
-        #while(temp_loss_t>loss_limit):
+        #while(temp_loss_t>loss_limit/(h+1)):
             i+=1
             if(i % 100 == 0):
                 localtime = time.asctime( time.localtime(time.time()) )
@@ -300,7 +259,7 @@ def run_network():
                 rand_y = y_vals_train[rand_index]
     
                 # Training step
-                _, temp_loss,get_pred = sess.run([optimizer_order[h],loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
+                _, temp_loss,get_pred = sess.run([train_step,loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
             
             loss_vec.append(temp_loss)
             #After the epoch is done, calculate loss, training, validation, test accuracy
@@ -325,12 +284,23 @@ def run_network():
             test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
             
             # Print updates
-            if (i+1)%20==0:
+            if (i+1)%500==0:
             #if True:
+                
+                qweights = []
+                weights = []
                 
                 #t_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0'))
                 #print("Pre Quantize Unique Weights : ", len(np.unique(t_weights)))
                 '''
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+                weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
                  
                 
                 temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
@@ -362,16 +332,19 @@ def run_network():
         print("Validation Accuracy = "+str(validation_accuracy))
         print()
         
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/kernel:0'),8))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/bias:0'),8))
-                
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
         
         #t_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0'))
         #print("Post Quantize Unique Weights : ", len(np.unique(t_weights)))
         #print( )
-        
                 
-        
         #Training related loss and prediction
         temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
         loss_vec.append(temp_loss)
@@ -397,10 +370,8 @@ def run_network():
         print("QUANTIZED")
         print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
         print("Validation Accuracy = "+str(validation_accuracy))
-        print("___________________________________________________________")
         
-    
-    #saver.save(sess, "../quantizeded_model_speeds_int8.ckpt")
+        print("___________________________________________________________")
     
     plt.plot(loss_vec, 'k-', label='Train Loss')
     plt.plot(test_loss, 'r--', label='Test Loss')
@@ -423,13 +394,15 @@ def run_network():
     
     return weights,qweights
 
-#______________________________________________________________________________
-    
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("speeds")
-    weights,weights_q = run_network()
+    setup("types")
+    weights,weights_q = run_network(15,2400)
+    new_var = tf.get_variable('dense_3/bias',[8],trainable=False)
+    #last_layer = sess.run(new_var)
+    #num_w = np.unique(weights)
+    #num_q = np.unique(weights_q)
     variables_names = [v.name for v in tf.trainable_variables()]
-    for i in weights_q:
+    for i in weights:
         print(len(np.unique(i)))
-    #sess.close()
+    sess.close()

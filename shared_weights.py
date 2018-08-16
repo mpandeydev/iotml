@@ -150,12 +150,12 @@ def run_network(fc , fc2):
     
     # Fully Connected Layers
     
-    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu,name="fc_1")
+    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu,name="dense")
     
     #fc_1_s = tf.layers.dense(conv1d_flat,hidden_layer_nodes_s,activation=tf.nn.relu)
     
-    fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu,name="fc_2_s")
-    fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu,name="fc_f_s")
+    fc_2_s = tf.layers.dense(fc_1,hidden_layer_nodes_2_s,activation=tf.nn.relu,name="dense_1")
+    fc_f_s = tf.layers.dense(fc_2_s,hidden_layer_nodes_3_s,activation=tf.nn.relu,name="dense_2")
     fprob_s = tf.nn.softmax(fc_f_s, name="softmax_s")
     
     #fc_1_t = tf.layers.dense(conv1d_flat,hidden_layer_nodes_t,activation=tf.nn.relu)

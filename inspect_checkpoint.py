@@ -29,7 +29,7 @@ from tensorflow.python.platform import flags
 FLAGS = None
 
 #filename = "../trained_model.ckpt"
-filename = "../quantized_model.ckpt"
+filename = "../quantizeded_model_types.ckpt"
 
 def print_tensors_in_checkpoint_file(file_name, tensor_name, all_tensors,
                                      all_tensor_names=False):
