@@ -7,6 +7,9 @@ import datetime
 import csv
 
 import os
+
+#tf.enable_eager_execution()
+
 os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
 precision = tf.float32
@@ -24,7 +27,7 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 1500
+generations         = 40
 loss_limit          = 0.075
 
 sample_length       = 1600
@@ -37,7 +40,7 @@ pool_sizes          = 4
 pool_stride         = 4
 
 conv_size           = 104
-quantize_train      = 4
+quantize_train      = 1
 
 quantize_on     = True
 
@@ -97,6 +100,42 @@ def quantize_tensor(input_tensor,bits_q):
     sess.run(assign_op)
     return converted_array
 
+def op_convert_to_int8(i):
+    quantized_tensor = []
+    zero = tf.cast(0,tf.float32)
+    one = tf.cast(1,tf.float32)
+    # Round weights to nearest part
+    
+    def neg(): 
+        quantized_tensor.append(0)
+        return 0
+    def pos(): 
+        quantized_tensor.append(1)
+        return 1
+    r = tf.cond(tf.greater(zero, i[0]), neg, pos)
+    return tf.cast(quantized_tensor,tf.float32)
+        
+def convert_tensor_to_int8(input_tensor):
+    full_range = 256
+    input_array = input_tensor
+    
+    max_value = tf.reduce_max(input_array)
+    min_value = tf.reduce_min(input_array)
+    
+    flat_x_vals = tf.layers.flatten(input_array)
+    quantized_tensor = []
+    
+    quantized_tensor = tf.map_fn(op_convert_to_int8,flat_x_vals)
+    
+    #converted_array = sess.run(quantized_tensor)
+    #print(converted_array)
+    converted_array_t = tf.cast(quantized_tensor,dtype=np.float16)
+    #converted_array_t = tf.reshape(converted_array_t, tf.shape(input_tensor))
+    #assign_op = tf.assign(input_tensor,converted_array_t)
+    #sess.run(assign_op)
+    return converted_array_t   
+
+
 #--------------------------------------------------------------------------------------------------------------
 
 def import_npy():
@@ -106,8 +145,8 @@ def import_npy():
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     #x_vals = x_vals = tdata[:,0:3,:]
-    #x_vals = np.load('../q_input.npy')
-    x_vals = np.load('../dataset_quantized.npy')
+    x_vals = np.load('../q_input.npy')
+    #x_vals = np.load('../dataset_quantized.npy')
     
 def setup(dataset):
     global x_vals, y_vals, speeds, types, x_vals_train, x_vals_test, x_vals_validation, y_vals_test, y_vals_train, y_vals_validation,logit_size
@@ -166,10 +205,10 @@ def print_trainable_variables(train_variables):
         print(v.name)
         
 def run_network():
-    #feature_maps = feature_maps
+    global saver
     conv_size = 160*feature_maps
-    #print("Parameter is : ",fc )
-     # Placeholders
+    
+    # Placeholders
     x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
     y_target = tf.placeholder(shape=(None), dtype=tf.int32)
     
@@ -177,6 +216,7 @@ def run_network():
     # Change functions from here on out if architecture changes
 
     #conv2 = tf.nn.conv1d(x_data,filterz, stride=2, padding="VALID")
+    
     filter_1d = np.array(np.random.rand(filter_width))
     filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float16)
     filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
@@ -188,10 +228,12 @@ def run_network():
     #conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
     conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
     conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])#How is conv_size known?
+    conv1d_flat_int8 = convert_tensor_to_int8(conv1d_flat)
+    # TO DO : Convert to Int8 Here
     
     # Fully Connected Layers
     
-    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
+    fc_1 = tf.layers.dense(conv1d_flat_int8,hidden_layer_nodes,activation=tf.nn.relu)
     fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
     #fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
     fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_f,activation=tf.nn.relu)
@@ -219,7 +261,7 @@ def run_network():
     train_vars = tf.trainable_variables() 
     train_step = my_opt.minimize(loss,var_list=train_vars)
     
-    # Second quantization cycle
+    '''# Second quantization cycle
     train_vars.remove(tf.get_variable('conv1d_f/bias',[feature_maps]))
     train_vars.remove(tf.get_variable('conv1d_f/kernel',[filter_width,3,feature_maps]))
     train_step_5 = my_opt.minimize(loss,var_list = train_vars)
@@ -242,7 +284,7 @@ def run_network():
     # Second quantization cycle
     #train_vars.remove(tf.get_variable('dense_3/bias',[logit_size]))
     #train_vars.remove(tf.get_variable('dense_3/kernel',[hidden_layer_nodes_3,logit_size]))
-    #train_step_1 = my_opt.minimize(loss,var_list = train_vars)
+    #train_step_1 = my_opt.minimize(loss,var_list = train_vars)'''
     
 # Initialize all variables
     
@@ -270,7 +312,7 @@ def run_network():
     weights = []
     
     order = [conv1d_f,fc_1,fc_2,fc_f]
-    optimizer_order = [train_step,train_step_5,train_step_4,train_step_3]
+    #optimizer_order = [train_step,train_step_5,train_step_4,train_step_3]
     
     for h in range(quantize_train):
         print( )
@@ -300,7 +342,8 @@ def run_network():
                 rand_y = y_vals_train[rand_index]
     
                 # Training step
-                _, temp_loss,get_pred = sess.run([optimizer_order[h],loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
+                #_, temp_loss,get_pred = sess.run([optimizer_order[h],loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
+                _, temp_loss,get_pred, int8_values = sess.run([train_step,loss,fprob,conv1d_flat_int8], feed_dict={x_data : np.array([rand_x]).reshape(batch_size,sample_length,input_channels), y_target:rand_y} )
             
             loss_vec.append(temp_loss)
             #After the epoch is done, calculate loss, training, validation, test accuracy
@@ -327,27 +370,10 @@ def run_network():
             # Print updates
             if (i+1)%20==0:
             #if True:
-                
                 #t_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0'))
                 #print("Pre Quantize Unique Weights : ", len(np.unique(t_weights)))
-                '''
-                 
-                
-                temp_loss,get_pred = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), y_target:y_vals_train} )
-                guess = np.argmax(get_pred,axis=1)
-                correct_pred = np.sum(np.equal(guess,y_vals_train))
-                train_accuracy = round(correct_pred*100/len(x_vals_train),4)
-                
-                test_temp_loss,predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), y_target:y_vals_test})
-                test_guess = np.argmax(predict,axis=1)
-                test_correct_pred = np.sum(np.equal(test_guess,y_vals_test))
-                test_accuracy = round(test_correct_pred*100/len(y_vals_test),4)
-                '''
-            
-                #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+'. Test Loss = ' + str((test_temp_loss))+'. Test Accuracy = ' + str((test_accuracy)))
-                #print('Generation: ' + str(i+1) + '. Loss = ' + str((temp_loss))+". Accuracy "+str(correct_pred*100/batch_size)+"%")
-                #localtime = time.asctime( time.localtime(time.time()) )
                 #time_now = datetime.datetime.now().time()
+                
                 print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
     
             validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target:y_vals_validation})
@@ -421,14 +447,17 @@ def run_network():
     
     #sess.close()
     
-    return weights,qweights
+    return weights,qweights,int8_values
 
 #______________________________________________________________________________
-    
+
+def save_network():
+    return saver.save(sess, "../quantizeded_model_speeds_int8.ckpt")
+
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
     setup("speeds")
-    weights,weights_q = run_network()
+    weights,weights_q,int8_values = run_network()
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
         print(len(np.unique(i)))
