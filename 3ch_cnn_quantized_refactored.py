@@ -29,9 +29,13 @@ loss_limit          = 0.2
 
 sample_length       = 1600
 
-filter_width        = 8
-kernel_stride       = 10
-feature_maps        = 6
+filter_width        = 6
+kernel_stride       = 4
+feature_maps        = 8
+
+filter_width_2        = 6
+kernel_stride_2       = 4
+feature_maps_2        = 4
 
 pool_sizes          = 4
 pool_stride         = 4
@@ -159,8 +163,12 @@ def setup(dataset):
     print("Setup Complete :", localtime)
 
 #*****************************************************************************
-def define_network(fmaps, conv_size):
-    feature_maps = fmaps
+    
+def run_network(fmaps, conv_size):
+    
+    # Log vectors
+    
+    #feature_maps = fmaps
     conv_size = conv_size
     print("Parameter is : ",feature_maps )
      # Placeholders
@@ -179,16 +187,45 @@ def define_network(fmaps, conv_size):
     
     # Convolutional and Pooling Layers
 
-    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
-    #conv1d_f = tf.layers.max_pooling1d(inputs=conv1d_f, pool_size=pool_sizes, strides=pool_stride)
+    conv1d_1 = tf.layers.conv1d(
+                                inputs=x_data,
+                                filters=feature_maps,
+                                kernel_size=filter_width,
+                                strides=kernel_stride,
+                                padding="valid",
+                                activation=tf.nn.relu,
+                                name="conv1d_f"
+                                )
+    
+    conv1d_f = tf.layers.conv1d(
+                                inputs=conv1d_1,
+                                filters=feature_maps_2,
+                                kernel_size=filter_width_2,
+                                strides=kernel_stride_2,
+                                padding="valid",
+                                activation=tf.nn.relu,
+                                name="conv1d_f"
+                                )
+    
     conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])#How is conv_size known?
     
     # Fully Connected Layers
     
-    fc_1 = tf.layers.dense(conv1d_flat,hidden_layer_nodes,activation=tf.nn.relu)
-    fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
-    fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
-    fc_f = tf.layers.dense(fc_3,hidden_layer_nodes_f,activation=tf.nn.relu)
+    fc_1 = tf.layers.dense(
+                            conv1d_flat,
+                            hidden_layer_nodes,
+                            activation=tf.nn.relu
+                            )
+    
+    #fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
+    #fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
+    
+    fc_f = tf.layers.dense(
+                            fc_1,
+                            hidden_layer_nodes_f,
+                            activation=tf.nn.relu
+                            )
+    
     fprob = tf.nn.softmax(fc_f, name=None)
     
     localtime = time.asctime( time.localtime(time.time()) )
@@ -214,12 +251,6 @@ def define_network(fmaps, conv_size):
     sess.run(init)
     localtime = time.asctime( time.localtime(time.time()) )
     print("Initialized Variables:", localtime)
-    
-    run_network(loss, train_step ,fprob)
-    
-def run_network(tsetp , final_layer):
-    
-    # Log vectors
     
     loss_vec = []
     test_loss = []
@@ -332,14 +363,14 @@ def run_network(tsetp , final_layer):
         print("Validation Accuracy = "+str(validation_accuracy))
         print()
         
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
-        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/bias:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/kernel:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_1.name)[0] + '/bias:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/bias:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+        #qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/bias:0')))
         
         #t_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0'))
         #print("Post Quantize Unique Weights : ", len(np.unique(t_weights)))

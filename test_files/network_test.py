@@ -12,7 +12,7 @@ import os
 
 os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
-precision = tf.float16
+precision = tf.float32
 logit_size = 8
 
 hidden_layer_nodes = 900
@@ -21,29 +21,20 @@ hidden_layer_nodes_2 = 500
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
-step_size           = 0.2
-
+step_size           = 0.02
  
 samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 1000
-loss_limit          = 0.02
+generations         = 9000
+loss_limit          = 0.075
 
 sample_length       = 1600
 
 filter_width        = 8
-kernel_stride       = 4
-feature_maps        = 12
-
-filter_width_2        = 8
-kernel_stride_2       = 4
-feature_maps_2        = 8
-
-filter_width_3        = 6
-kernel_stride_3       = 4
-feature_maps_3        = 4
+kernel_stride       = 10
+feature_maps        = 5
 
 pool_sizes          = 4
 pool_stride         = 4
@@ -149,25 +140,19 @@ def convert_tensor_to_int8(input_tensor):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../training_data_3d.npy')
+    tdata = np.load('../../training_data_3d.npy')
     print(np.size(tdata))
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
-    x_vals = tdata[:,0:3,:]
-    
-    x_vals = tf.keras.utils.normalize(x_vals,axis=-1,order=2)
-    
-    # Zero means
-    #'''
+    x_vals = x_vals = tdata[:,0:3,:]
     original_shape = x_vals.shape
     x_vals = x_vals.reshape(-1,1600)
     means = np.mean(x_vals,dtype=np.float16,axis=(1))
     means = means.reshape(27024,1)
     x_vals = x_vals-means
     x_vals = x_vals.reshape(original_shape)
-    #'''
     
-    #x_vals = np.load('../q_input.npy')
+    #x_vals = np.load('../../q_input.npy')
     #x_vals = np.load('../dataset_quantized.npy')
     
 def setup(dataset):
@@ -179,7 +164,8 @@ def setup(dataset):
     choice = np.random.choice(len(x_vals), size = samplen)
     x_vals = x_vals[np.array(choice)]
     
-    x_vals = x_vals.astype(np.float16)
+    x_vals = x_vals.astype(np.float32)
+    x_vals = tf.keras.utils.normalize(x_vals,axis=-1,order=2)
     
     train_indices = np.random.choice(len(x_vals), round(len(x_vals)*0.8), replace=False)
     rem = np.array(list(set(range(len(x_vals))) - set(train_indices)))
@@ -227,9 +213,10 @@ def print_trainable_variables(train_variables):
         
 def run_network():
     global saver
+    conv_size = 160*feature_maps
     
     # Placeholders
-    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float16)
+    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
     y_target = tf.placeholder(shape=(None), dtype=tf.int32)
     
     
@@ -237,72 +224,27 @@ def run_network():
 
     #conv2 = tf.nn.conv1d(x_data,filterz, stride=2, padding="VALID")
     
-    #filter_1d = np.array(np.random.rand(filter_width))
-    #filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float16)
-    #filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
+    filter_1d = np.array(np.random.rand(filter_width))
+    filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float16)
+    filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
          
 # Set up Computation Graph 
     
     # Convolutional and Pooling Layers
 
-    conv1d_1 = tf.layers.conv1d(
-                                inputs=x_data,
-                                filters=feature_maps,
-                                kernel_size=filter_width,
-                                strides=kernel_stride,
-                                padding="valid",
-                                activation=tf.nn.relu,
-                                name="conv1d_1"
-                                )
-    conv1d_1_cast = tf.cast(conv1d_1,np.float16)
-    
-    conv1d_2 = tf.layers.conv1d(
-                                inputs=conv1d_1_cast,
-                                filters=feature_maps_2,
-                                kernel_size=filter_width_2,
-                                strides=kernel_stride_2,
-                                padding="valid",
-                                activation=tf.nn.relu,
-                                name="conv1d_2"
-                                )
-    conv1d_2_cast = tf.cast(conv1d_2,np.float16)
-    
-    conv1d_f = tf.layers.conv1d(
-                                inputs=conv1d_2,
-                                filters=feature_maps_3,
-                                kernel_size=filter_width_3,
-                                strides=kernel_stride_3,
-                                padding="valid",
-                                activation=tf.nn.relu,
-                                name="conv1d_f"
-                                )
-    conv1d_f_cast = tf.cast(conv1d_f,np.float16)
-    
-    conv1d_flat = tf.contrib.layers.flatten(conv1d_f_cast)
-    
-    # Fully Connected Layers
-    
-    '''fc_1 = tf.layers.dense(
-                            conv1d_flat,
-                            hidden_layer_nodes,
-                            activation=tf.nn.relu
-                            )'''
-    
-    #fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
-    #fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
-    
-    fc_f = tf.layers.dense(
-                            conv1d_flat,
-                            hidden_layer_nodes_f, 
-                            activation=tf.nn.relu
-                            )
-    fc_f_16 = tf.cast(fc_f,np.float16)
-    #fc_f = tf.cast(fc_f_l,np.float16)
+    #conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu,name="conv1d_f")
+    conv1d_f = tf.layers.conv1d(inputs=x_data,filters=feature_maps,kernel_size=filter_width,strides=kernel_stride,padding="valid",activation=tf.nn.relu)
+    conv1d_flat = tf.reshape(conv1d_f, [-1, conv_size])#How is conv_size known?
+    conv1d_flat_int8 = convert_tensor_to_int8(conv1d_flat)
     # TO DO : Convert to Int8 Here
     
     # Fully Connected Layers
     
-    fprob = tf.nn.softmax(fc_f_16)
+    fc_1 = tf.layers.dense(conv1d_flat_int8,hidden_layer_nodes,activation=tf.nn.relu)
+    fc_2 = tf.layers.dense(fc_1,hidden_layer_nodes_2,activation=tf.nn.relu)
+    #fc_3 = tf.layers.dense(fc_2,hidden_layer_nodes_3,activation=tf.nn.relu)
+    fc_f = tf.layers.dense(fc_2,hidden_layer_nodes_f,activation=tf.nn.relu)
+    fprob = tf.nn.softmax(fc_f)
     
     localtime = time.asctime( time.localtime(time.time()) )
     print("Graph Defined :", localtime)
@@ -315,7 +257,7 @@ def run_network():
     
 # Define Loss function
     
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f_16)#Why fc_f and not fprob?
+    loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f)#Why fc_f and not fprob?
     #loss = tf.losses.softmax_cross_entropy(onehot_labels=y_target,logits=final_out)
     
 # Optimizer function
@@ -376,7 +318,7 @@ def run_network():
     qweights = []
     weights = []
     
-    order = [conv1d_1_cast,conv1d_2_cast]
+    order = [conv1d_f,fc_1,fc_2,fc_f]
     #optimizer_order = [train_step,train_step_5,train_step_4,train_step_3]
     
     for h in range(quantize_train):
@@ -393,7 +335,8 @@ def run_network():
                 localtime = time.asctime( time.localtime(time.time()) )
                 #print("Epoch %d start time:" % i, localtime)
     
-            dataset_size = len(x_vals)    
+            dataset_size = len(x_vals)
+    
             num_iters = dataset_size//batch_size
     
             for iter in range(num_iters):
@@ -404,10 +347,10 @@ def run_network():
                 rand_index = np.random.choice(len(x_vals_train), size = batch_size)
                 rand_x = [x_vals_train[rand_index]]
                 rand_y = y_vals_train[rand_index]
-                
+    
                 # Training step
                 #_, temp_loss,get_pred = sess.run([optimizer_order[h],loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
-                _, temp_loss,get_pred = sess.run([train_step,loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape(batch_size,sample_length,input_channels), y_target:rand_y} )
+                _, temp_loss,get_pred, int8_values = sess.run([train_step,loss,fprob,conv1d_flat_int8], feed_dict={x_data : np.array([rand_x]).reshape(batch_size,sample_length,input_channels), y_target:rand_y} )
             
             loss_vec.append(temp_loss)
             #After the epoch is done, calculate loss, training, validation, test accuracy
@@ -439,10 +382,6 @@ def run_network():
                 #time_now = datetime.datetime.now().time()
                 
                 print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
-                qweights = []
-                for h in range(len(order)):
-                    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/kernel:0'),8))
-                    qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/bias:0'),8))
     
             validation_loss,validation_predict = sess.run([loss,fprob], feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), y_target:y_vals_validation})
             validation_guess = np.argmax(validation_predict,axis=1)
@@ -455,6 +394,9 @@ def run_network():
         print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
         print("Validation Accuracy = "+str(validation_accuracy))
         print()
+        
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/kernel:0'),8))
+        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/bias:0'),8))
                 
         
         #t_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_2.name)[0] + '/kernel:0'))
@@ -512,7 +454,7 @@ def run_network():
     
     #sess.close()
     
-    return weights,qweights
+    return weights,qweights,int8_values
 
 #______________________________________________________________________________
 
@@ -521,8 +463,8 @@ def save_network():
 
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("types")
-    weights,weights_q = run_network()
+    setup("speeds")
+    weights,weights_q,int8_values = run_network()
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
         print(len(np.unique(i)))
