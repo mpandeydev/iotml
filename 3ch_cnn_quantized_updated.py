@@ -12,7 +12,7 @@ import os
 
 os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
-precision = tf.float32
+precision = tf.float16
 precision_np = np.float32
 logit_size = 8
 
@@ -261,11 +261,12 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_1"
                                 )
-    #conv1d_1_cast = tf.cast(conv1d_1,np.float16)
-    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1, training = True, fused=False)
+    conv1d_1_cast = tf.cast(conv1d_1,np.float32)
+    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, training = True, fused=False)
+    conv1d_1_norm16 = tf.cast(conv1d_1_norm,np.float16)
     
     conv1d_2 = tf.layers.conv1d(
-                                inputs=conv1d_1_norm,
+                                inputs=conv1d_1_norm16,
                                 filters=feature_maps_2,
                                 kernel_size=filter_width_2,
                                 strides=kernel_stride_2,
@@ -274,11 +275,12 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_2"
                                 )
-    #conv1d_2_cast = tf.cast(conv1d_2,np.float16)
-    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2, training = True)
+    conv1d_2_cast = tf.cast(conv1d_2,np.float32)
+    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, training = True, fused=False)
+    conv1d_2_norm16 = tf.cast(conv1d_2_norm,np.float16)
     
     conv1d_f = tf.layers.conv1d(
-                                inputs=conv1d_2_norm,
+                                inputs=conv1d_2_norm16,
                                 filters=feature_maps_3,
                                 kernel_size=filter_width_3,
                                 strides=kernel_stride_3,
@@ -287,10 +289,11 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_f"
                                 )
-    #conv1d_f_cast = tf.cast(conv1d_f,np.float16)
-    conv1d_f_norm = tf.layers.batch_normalization(conv1d_f, training = True)
+    conv1d_3_cast = tf.cast(conv1d_f,np.float32)
+    conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, training = True, fused=False)
+    conv1d_3_norm16 = tf.cast(conv1d_3_norm,np.float16)
     
-    conv1d_flat = tf.contrib.layers.flatten(conv1d_f_norm)
+    conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
     
     # Fully Connected Layers
     
