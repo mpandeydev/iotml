@@ -12,7 +12,8 @@ import os
 
 os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
-precision = tf.float16
+precision = tf.float32
+precision_np = np.float32
 logit_size = 8
 
 hidden_layer_nodes = 900
@@ -28,7 +29,7 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 1000
+generations         = 300
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -111,8 +112,8 @@ def quantize_tensor(input_tensor,bits_q):
 
 def op_convert_to_int8(i):
     quantized_tensor = []
-    zero = tf.cast(0,tf.float32)
-    one = tf.cast(1,tf.float32)
+    zero = tf.cast(0,precision)
+    one = tf.cast(1,precision)
     # Round weights to nearest part
     
     def neg(): 
@@ -122,7 +123,7 @@ def op_convert_to_int8(i):
         quantized_tensor.append(1)
         return 1
     r = tf.cond(tf.greater(zero, i[0]), neg, pos)
-    return tf.cast(quantized_tensor,tf.float32)
+    return tf.cast(quantized_tensor,precision)
         
 def convert_tensor_to_int8(input_tensor):
     full_range = 256
@@ -138,7 +139,7 @@ def convert_tensor_to_int8(input_tensor):
     
     #converted_array = sess.run(quantized_tensor)
     #print(converted_array)
-    converted_array_t = tf.cast(quantized_tensor,dtype=np.float16)
+    converted_array_t = tf.cast(quantized_tensor,dtype=precision)
     #converted_array_t = tf.reshape(converted_array_t, tf.shape(input_tensor))
     #assign_op = tf.assign(input_tensor,converted_array_t)
     #sess.run(assign_op)
@@ -155,13 +156,13 @@ def import_npy():
     types = tdata[:,3,1]
     x_vals = tdata[:,0:3,:]
     
-    x_vals = tf.keras.utils.normalize(x_vals,axis=-1,order=2)
+    #x_vals = tf.keras.utils.normalize(x_vals,axis=-1,order=2)
     
     # Zero means
     #'''
     original_shape = x_vals.shape
     x_vals = x_vals.reshape(-1,1600)
-    means = np.mean(x_vals,dtype=np.float16,axis=(1))
+    means = np.mean(x_vals,dtype=precision_np,axis=(1))
     means = means.reshape(27024,1)
     x_vals = x_vals-means
     x_vals = x_vals.reshape(original_shape)
@@ -179,7 +180,7 @@ def setup(dataset):
     choice = np.random.choice(len(x_vals), size = samplen)
     x_vals = x_vals[np.array(choice)]
     
-    x_vals = x_vals.astype(np.float16)
+    x_vals = x_vals.astype(precision_np)
     
     train_indices = np.random.choice(len(x_vals), round(len(x_vals)*0.8), replace=False)
     rem = np.array(list(set(range(len(x_vals))) - set(train_indices)))
@@ -194,7 +195,7 @@ def setup(dataset):
         logit_size = 8
         y_vals = np.array([types[:]])
     y_vals = np.array(y_vals[0,np.array(choice)])
-    y_vals = y_vals.astype(np.float)
+    #y_vals = y_vals.astype(np.float)
     y_vals = y_vals.astype(np.int32)
     
     localtime = time.asctime( time.localtime(time.time()) )
@@ -229,7 +230,7 @@ def run_network():
     global saver
     
     # Placeholders
-    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float16)
+    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=precision)
     y_target = tf.placeholder(shape=(None), dtype=tf.int32)
     
     
@@ -240,6 +241,11 @@ def run_network():
     #filter_1d = np.array(np.random.rand(filter_width))
     #filter_1d = tf.convert_to_tensor(filter_1d,dtype=np.float16)
     #filter_1d = tf.reshape(filter_1d,[filter_width,1,1])
+    
+    kernel_init = tf.glorot_uniform_initializer(
+                                                        seed=None,
+                                                        dtype=tf.float16
+                                                        )
          
 # Set up Computation Graph 
     
@@ -252,33 +258,39 @@ def run_network():
                                 strides=kernel_stride,
                                 padding="valid",
                                 activation=tf.nn.relu,
+                                kernel_initializer = kernel_init,
                                 name="conv1d_1"
                                 )
-    conv1d_1_cast = tf.cast(conv1d_1,np.float16)
+    #conv1d_1_cast = tf.cast(conv1d_1,np.float16)
+    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1, training = True, fused=False)
     
     conv1d_2 = tf.layers.conv1d(
-                                inputs=conv1d_1_cast,
+                                inputs=conv1d_1_norm,
                                 filters=feature_maps_2,
                                 kernel_size=filter_width_2,
                                 strides=kernel_stride_2,
                                 padding="valid",
                                 activation=tf.nn.relu,
+                                kernel_initializer = kernel_init,
                                 name="conv1d_2"
                                 )
-    conv1d_2_cast = tf.cast(conv1d_2,np.float16)
+    #conv1d_2_cast = tf.cast(conv1d_2,np.float16)
+    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2, training = True)
     
     conv1d_f = tf.layers.conv1d(
-                                inputs=conv1d_2,
+                                inputs=conv1d_2_norm,
                                 filters=feature_maps_3,
                                 kernel_size=filter_width_3,
                                 strides=kernel_stride_3,
                                 padding="valid",
                                 activation=tf.nn.relu,
+                                kernel_initializer = kernel_init,
                                 name="conv1d_f"
                                 )
-    conv1d_f_cast = tf.cast(conv1d_f,np.float16)
+    #conv1d_f_cast = tf.cast(conv1d_f,np.float16)
+    conv1d_f_norm = tf.layers.batch_normalization(conv1d_f, training = True)
     
-    conv1d_flat = tf.contrib.layers.flatten(conv1d_f_cast)
+    conv1d_flat = tf.contrib.layers.flatten(conv1d_f_norm)
     
     # Fully Connected Layers
     
@@ -296,7 +308,7 @@ def run_network():
                             hidden_layer_nodes_f, 
                             activation=tf.nn.relu
                             )
-    fc_f_16 = tf.cast(fc_f,np.float16)
+    fc_f_16 = tf.cast(fc_f,precision)
     #fc_f = tf.cast(fc_f_l,np.float16)
     # TO DO : Convert to Int8 Here
     
@@ -376,7 +388,7 @@ def run_network():
     qweights = []
     weights = []
     
-    order = [conv1d_1_cast,conv1d_2_cast]
+    order = [conv1d_1,conv1d_2, conv1d_f]
     #optimizer_order = [train_step,train_step_5,train_step_4,train_step_3]
     
     for h in range(quantize_train):
@@ -521,7 +533,7 @@ def save_network():
 
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("types")
+    setup("speeds")
     weights,weights_q = run_network()
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
