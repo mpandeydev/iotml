@@ -29,7 +29,7 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 300
+generations         = 200
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -262,7 +262,7 @@ def run_network():
                                 name="conv1d_1"
                                 )
     conv1d_1_cast = tf.cast(conv1d_1,np.float32)
-    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, training = True, fused=False)
+    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, training = True, fused=False, name="bn1")
     conv1d_1_norm16 = tf.cast(conv1d_1_norm,np.float16)
     
     conv1d_2 = tf.layers.conv1d(
@@ -276,7 +276,7 @@ def run_network():
                                 name="conv1d_2"
                                 )
     conv1d_2_cast = tf.cast(conv1d_2,np.float32)
-    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, training = True, fused=False)
+    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, training = True, fused=False, name = "bn2")
     conv1d_2_norm16 = tf.cast(conv1d_2_norm,np.float16)
     
     conv1d_f = tf.layers.conv1d(
@@ -290,7 +290,7 @@ def run_network():
                                 name="conv1d_f"
                                 )
     conv1d_3_cast = tf.cast(conv1d_f,np.float32)
-    conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, training = True, fused=False)
+    conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, training = True, fused=False, name = "bn3")
     conv1d_3_norm16 = tf.cast(conv1d_3_norm,np.float16)
     
     conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
@@ -309,7 +309,8 @@ def run_network():
     fc_f = tf.layers.dense(
                             conv1d_flat,
                             hidden_layer_nodes_f, 
-                            activation=tf.nn.relu
+                            activation=tf.nn.relu,
+                            name = "logits"
                             )
     fc_f_16 = tf.cast(fc_f,precision)
     #fc_f = tf.cast(fc_f_l,np.float16)
@@ -531,14 +532,15 @@ def run_network():
 
 #______________________________________________________________________________
 
-def save_network():
-    return saver.save(sess, "../quantizeded_model_speeds_int8.ckpt")
+def save_network(save_path):
+    return saver.save(sess,save_path)
 
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("speeds")
+    setup("types")
     weights,weights_q = run_network()
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
         print(len(np.unique(i)))
-    #sess.close()
+    save_network("../bn_quantized_model_types.ckpt")
+    sess.close()
