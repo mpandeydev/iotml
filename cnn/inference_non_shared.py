@@ -3,10 +3,10 @@ import tensorflow as tf
 import numpy as np
 import time
 
-model = "../bn_quantized_model_types.ckpt"
+model = "../../full_precision_model.ckpt"
 logit_size = 8
 
-precision = tf.float16
+precision = tf.float32
 precision_np = np.float32
 
 hidden_layer_nodes = 900
@@ -76,7 +76,7 @@ def activation(layer_input,weights,bias):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../training_data_3d.npy')
+    tdata = np.load('../../training_data_3d.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     x_vals = tdata[:,0:3,:]
@@ -90,7 +90,7 @@ def setup():
     choice = np.random.choice(len(x_vals), size = samplen)
     x_vals = x_vals[np.array(choice)]
     
-    x_vals = x_vals.astype(np.float16)
+    x_vals = x_vals.astype(np.float32)
     
     original_shape = x_vals.shape
     x_vals = x_vals.reshape(-1,1600)
@@ -137,7 +137,7 @@ import_npy()
 setup()
 
  # Placeholders
-x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float16)
+x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
 y_target_s = tf.placeholder(shape=(None), dtype=tf.int32) 
 y_target_t = tf.placeholder(shape=(None), dtype=tf.int32) 
 
@@ -152,7 +152,7 @@ conv1d_1 = tf.layers.conv1d(
                             )
 conv1d_1_cast = tf.cast(conv1d_1,np.float32)
 conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, training = True, fused=False, name = "foo/bn1")
-conv1d_1_norm16 = tf.cast(conv1d_1_norm,np.float16)
+conv1d_1_norm16 = tf.cast(conv1d_1_norm,np.float32)
 
 conv1d_2 = tf.layers.conv1d(
                             inputs=conv1d_1_norm16,
@@ -165,7 +165,7 @@ conv1d_2 = tf.layers.conv1d(
                             )
 conv1d_2_cast = tf.cast(conv1d_2,np.float32)
 conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, training = True, fused=False, name = "foo/bn2")
-conv1d_2_norm16 = tf.cast(conv1d_2_norm,np.float16)
+conv1d_2_norm16 = tf.cast(conv1d_2_norm,np.float32)
 
 conv1d_f = tf.layers.conv1d(
                             inputs=conv1d_2_norm16,
@@ -178,7 +178,7 @@ conv1d_f = tf.layers.conv1d(
                             )
 conv1d_3_cast = tf.cast(conv1d_f,np.float32)
 conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, training = True, fused=False, name = "foo/bn3")
-conv1d_3_norm16 = tf.cast(conv1d_3_norm,np.float16)
+conv1d_3_norm16 = tf.cast(conv1d_3_norm,np.float32)
 
 conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
 

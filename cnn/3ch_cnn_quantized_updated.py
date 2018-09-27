@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tfgraphviz as tfg
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -10,7 +9,7 @@ import os
 
 #tf.enable_eager_execution()
 
-os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
+#os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
 
 precision = tf.float16
 precision_np = np.float32
@@ -54,10 +53,12 @@ quantize_train      = 1
 
 quantize_on     = True
 
+# Configure TF session
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
 sess = tf.Session(config=config)
 
+# Initialize empty lists to hold data
 x_vals = []
 y_vals = []
 
@@ -88,12 +89,13 @@ def quantize_tensor(input_tensor,bits_q):
     
     bits = bits_q
     full_range = 2**bits
-    converted_array = []
-    
+    converted_array = []   
     input_array = sess.run(input_tensor)
     max_value = np.float16(np.amax(input_array)) 
     min_value = np.float16(np.amin(input_array))
-    quantum = np.float16((max_value-min_value)/full_range)
+    
+    ## Quantize range to a resolution given by full_range
+    quantum = np.float16((max_value-min_value)/full_range) #Quantum is a value that 1 bit represents
     quantas = []
     for i in range(0,full_range):
             quantas.append(np.float16(i*quantum)+min_value)
@@ -150,7 +152,7 @@ def convert_tensor_to_int8(input_tensor):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../training_data_3d.npy')
+    tdata = np.load('../../training_data_3d.npy')
     print(np.size(tdata))
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
@@ -424,7 +426,8 @@ def run_network():
                 # Training step
                 #_, temp_loss,get_pred = sess.run([optimizer_order[h],loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), y_target:rand_y} )
                 _, temp_loss,get_pred = sess.run([train_step,loss,fprob], feed_dict={x_data : np.array([rand_x]).reshape(batch_size,sample_length,input_channels), y_target:rand_y} )
-            
+                print(temp_loss)
+                
             loss_vec.append(temp_loss)
             #After the epoch is done, calculate loss, training, validation, test accuracy
             #At the end the following are plotted loss_vec, test_loss, success_rate, test_rate

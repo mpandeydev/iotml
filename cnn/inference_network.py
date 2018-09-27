@@ -8,7 +8,7 @@ precision = tf.float32
 t_logit_size = 8
 s_logit_size = 5
 
-model = "../quantized_model_perlayer_10.ckpt"
+model = "../../full_precision_model.ckpt"
 
 hidden_layer_nodes = 900
 
@@ -69,7 +69,7 @@ def activation(layer_input,weights,bias):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../training_data_3d.npy')
+    tdata = np.load('../../training_data_3d.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     x_vals = tdata[:,0:3,:]
