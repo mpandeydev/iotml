@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-meta = "../../pure_conv/full_precision_model.ckpt.meta"
-model = "../../pure_conv/full_precision_model.ckpt"
+meta = "../trained_models/pure_conv/full_precision_model.ckpt.meta"
+model = "../trained_models/pure_conv/full_precision_model.ckpt"
 
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8

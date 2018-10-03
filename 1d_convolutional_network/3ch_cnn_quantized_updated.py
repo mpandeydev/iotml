@@ -7,10 +7,6 @@ import csv
 
 import os
 
-#tf.enable_eager_execution()
-
-#os.environ["PATH"] += os.pathsep + 'D:/CMU_Summer18/graphviz-2.38/release/bin/'
-
 precision = tf.float16
 precision_np = np.float32
 logit_size = 8
@@ -152,7 +148,7 @@ def convert_tensor_to_int8(input_tensor):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../../training_data_3d.npy')
+    tdata = np.load('../../datasets/training_data_3d.npy')
     print(np.size(tdata))
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
@@ -545,5 +541,5 @@ with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
         print(len(np.unique(i)))
-    save_network("../bn_quantized_model_types.ckpt")
+    save_network("../trained_models/bn_quantized_model_types.ckpt")
     sess.close()

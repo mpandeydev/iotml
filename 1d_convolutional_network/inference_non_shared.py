@@ -3,11 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-<<<<<<< HEAD:1d_convolutional_network/inference_non_shared.py
-model = "../../pure_conv/full_precision_model.ckpt"
-=======
-model = "../../full_precision_model.ckpt"
->>>>>>> 212500da57de61dcdd1e227f5622ebc5d8060d7a:cnn/inference_non_shared.py
+model = "../trained_models/pure_conv/full_precision_model.ckpt"
 logit_size = 8
 
 precision = tf.float32
@@ -80,7 +76,7 @@ def activation(layer_input,weights,bias):
 
 def import_npy():
     global x_vals,speeds,types
-    tdata = np.load('../../training_data_3d.npy')
+    tdata = np.load('../../datasets/training_data_3d.npy')
     speeds = tdata[:,3,0]
     types = tdata[:,3,1]
     x_vals = tdata[:,0:3,:]
