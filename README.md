@@ -28,5 +28,5 @@
   
 ## Task List
 
-[ ] Clean up code to remove redundant or unnecessary functions
-[ ] Pruning algorithm for 1D Convolution Layers
+- [ ] Clean up code to remove redundant or unnecessary functions
+- [ ] Pruning algorithm for 1D Convolution Layers
