@@ -5,8 +5,8 @@
 - ```.. / datasets``` : All datasets should be contained in a folder named **datasets** one level above Git repo.
 
 - ```1d_convolutional_network``` : Contains TensorFlow code for generating and training 1D Convolutional graphs, as well as scripts for inferencing and preforming additional post training operations on the model.
-  - ```/3ch_cnn_quantized_updated.py``` : Script to generate 1D CNN graph and train it using training dataset _TODO : Clean code and keep vanilla implementation of 1D CNN._
-  - ```/inference_non_shared.py``` : Script to use trained model to inference using subsets of dataset
+  - ```/1d_cnn_training.py``` : Script to generate 1D CNN graph and train it using training dataset _TODO : Clean code and keep vanilla implementation of 1D CNN._
+  - ```/1d_cnn_inference.py``` : Script to use trained model to inference using subsets of dataset
   - ```/pruning.py``` : _TODO : Script for pruning individual neurons from each kernel_
   
 - ```trained_models``` : Contains trained TensorFlow models as Checkpoint and Meta files
