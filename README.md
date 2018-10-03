@@ -24,6 +24,7 @@
   
 - ### Inferencing
   - Open ```1d_convolutional_network/inference_non_shared.py```
+  - Select dataset on which to inference, selectable modes are ```speeds``` and ```types```
   - Change **ONLY** any of : ```batch_size``` or ```step_size```
   
 ## Task List
