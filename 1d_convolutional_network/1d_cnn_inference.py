@@ -4,7 +4,11 @@ import numpy as np
 import time
 
 test_on = "types" # speeds or types
+
+variable_scope = "foo" #/ "pruned"
 model = "../trained_models/pure_conv/full_precision_model.ckpt"
+#model = "../trained_models/pruned_networks/test_model.ckpt"
+
 logit_size = 8
 
 precision = tf.float32
@@ -22,7 +26,7 @@ samplen             = 9008
 batch_size          = 200
 input_channels      = 3
  
-generations         = 200
+generations         = 20
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -147,97 +151,96 @@ setup(test_on)
  # Placeholders
 x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
 y_target = tf.placeholder(shape=(None), dtype=tf.int32) 
-
-# First Convolution Layer
-
-conv1d_1 = tf.layers.conv1d(
-                            inputs=x_data,
-                            filters=feature_maps,
-                            kernel_size=filter_width,
-                            strides=kernel_stride,
-                            padding="valid",
+  
+with tf.variable_scope(variable_scope):  
+    # First Convolution Layer
+    
+    conv1d_1 = tf.layers.conv1d(
+                                inputs=x_data,
+                                filters=feature_maps,
+                                kernel_size=filter_width,
+                                strides=kernel_stride,
+                                padding="valid",
+                                activation=tf.nn.relu,
+                                name="conv1d_1"
+                                )
+    conv1d_1_cast = tf.cast(conv1d_1,
+                            precision_np)
+    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
+                                                  training = True, 
+                                                  fused=False, 
+                                                  name = "bn1")
+    
+    conv1d_1_norm16 = tf.cast(conv1d_1_norm,
+                              precision_np)
+    
+    # Second Convolution Layer
+    
+    conv1d_2 = tf.layers.conv1d(
+                                inputs=conv1d_1_norm16,
+                                filters=feature_maps_2,
+                                kernel_size=filter_width_2,
+                                strides=kernel_stride_2,
+                                padding="valid",
+                                activation=tf.nn.relu,
+                                name="conv1d_2"
+                                )
+    conv1d_2_cast = tf.cast(conv1d_2,
+                            precision_np)
+    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
+                                                  training = True, 
+                                                  fused=False, 
+                                                  name = "bn2")
+    conv1d_2_norm16 = tf.cast(conv1d_2_norm,
+                              precision_np)
+    
+    # Final Convolution Layer
+    
+    conv1d_f = tf.layers.conv1d(
+                                inputs=conv1d_2_norm16,
+                                filters=feature_maps_3,
+                                kernel_size=filter_width_3,
+                                strides=kernel_stride_3,
+                                padding="valid",
+                                activation=tf.nn.relu,
+                                name="conv1d_f"
+                                )
+    conv1d_3_cast = tf.cast(conv1d_f,
+                            precision_np)
+    conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
+                                                  training = True, 
+                                                  fused=False, 
+                                                  name = "bn3")
+    conv1d_3_norm16 = tf.cast(conv1d_3_norm,
+                              precision_np)
+    
+    conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
+    
+    # Fully Connected Layers
+    
+    fc_f = tf.layers.dense(
+                            conv1d_flat,
+                            hidden_layer_nodes_f, 
                             activation=tf.nn.relu,
-                            name="foo/conv1d_1"
+                            name="logits"
                             )
-conv1d_1_cast = tf.cast(conv1d_1,
-                        precision_np)
-conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
-                                              training = True, 
-                                              fused=False, 
-                                              name = "foo/bn1")
-conv1d_1_norm16 = tf.cast(conv1d_1_norm,
-                          precision_np)
-
-# Second Convolution Layer
-
-conv1d_2 = tf.layers.conv1d(
-                            inputs=conv1d_1_norm16,
-                            filters=feature_maps_2,
-                            kernel_size=filter_width_2,
-                            strides=kernel_stride_2,
-                            padding="valid",
-                            activation=tf.nn.relu,
-                            name="foo/conv1d_2"
-                            )
-conv1d_2_cast = tf.cast(conv1d_2,
-                        precision_np)
-conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
-                                              training = True, 
-                                              fused=False, 
-                                              name = "foo/bn2")
-conv1d_2_norm16 = tf.cast(conv1d_2_norm,
-                          precision_np)
-
-# Final Convolution Layer
-
-conv1d_f = tf.layers.conv1d(
-                            inputs=conv1d_2_norm16,
-                            filters=feature_maps_3,
-                            kernel_size=filter_width_3,
-                            strides=kernel_stride_3,
-                            padding="valid",
-                            activation=tf.nn.relu,
-                            name="foo/conv1d_f"
-                            )
-conv1d_3_cast = tf.cast(conv1d_f,
-                        precision_np)
-conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
-                                              training = True, 
-                                              fused=False, 
-                                              name = "foo/bn3")
-conv1d_3_norm16 = tf.cast(conv1d_3_norm,
-                          precision_np)
-
-conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
-
-# Fully Connected Layers
-
-fc_f = tf.layers.dense(
-                        conv1d_flat,
-                        hidden_layer_nodes_f, 
-                        activation=tf.nn.relu,
-                        name="foo/logits"
-                        )
-fc_f_16 = tf.cast(fc_f,precision)
-
-# Fully Connected Layers
-
-fprob = tf.nn.softmax(fc_f_16)
+    fc_f_16 = tf.cast(fc_f,precision)
+    
+    # Fully Connected Layers
+    
+    fprob = tf.nn.softmax(fc_f_16)
 
 # Initialize Graph
 
-thisgraph = tf.Graph()
+thisgraph = tf.get_default_graph()
 
 localtime = time.asctime( time.localtime(time.time()) )
 print("Graph Defined :", localtime)
 
 loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f_16)
-qsaver = tf.train.Saver()
 
 # Initialize All Variables
 
-init = tf.global_variables_initializer()
-sess.run(init)
 localtime = time.asctime( time.localtime(time.time()) )
 print("Initialized Variables:", localtime)
 
@@ -256,23 +259,43 @@ test_success_rate = []
 
 # Add ops to save and restore all the variables.
 
+# Restore Meta graph
+
+#saver = tf.train.import_meta_graph(meta)
+#saver.restore(sess, tf.train.latest_checkpoint('../trained_models/pruned_networks/'))
+
+
+init_g = tf.global_variables_initializer()
+init_l = tf.local_variables_initializer()
+    
+sess.run(init_g)
+sess.run(init_l)
+
+# Restore Model
+
 saver = tf.train.Saver()
+saver.restore(sess,model)
 
-# Restore variables from disk.
-
-saver.restore(sess, model)
 print("Model restored.")
 
+varpath = str(variable_scope+"/conv1d_2/bias")
+test_out = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, varpath)[0])
 # Store values of trained variables 
 #(For analysis. These values are not used by the model directly)
 
 trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
 
+for i in trainable_variables:
+    print(i.name)
+    
+#test_var_b = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'pruned/conv1d_2/bias')[0])
+#test_var_k = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'conv1d_2_pruned/kernel')[0])
+
 for i in range(generations):
      with thisgraph.as_default():
             
          # Get random batch
-                
+            
             rand_index = np.random.choice(len(x_vals_train), size = batch_size)
             
             rand_x = [x_vals_train[rand_index]]
