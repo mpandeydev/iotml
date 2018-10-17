@@ -244,19 +244,6 @@ loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f_16)
 localtime = time.asctime( time.localtime(time.time()) )
 print("Initialized Variables:", localtime)
 
-# Log vectors
-
-loss_list = []
-test_loss = []
-
-# Speeds
-
-test_predictions = []
-prediction_list = []
-success_rate = []
-successful_guesses = []
-test_success_rate = []    
-
 # Add ops to save and restore all the variables.
 
 # Restore Meta graph
@@ -334,7 +321,7 @@ def prune_layer(tensor,next_tensor,parameter,num_prune):
     
     return 0
 
-def inference(x_vals_train,batch_size,generations):
+def inference(rx,ry,batch_size,generations):
     
     # Log vectors
     
@@ -351,11 +338,8 @@ def inference(x_vals_train,batch_size,generations):
                 
              # Get random batch
                 
-                
-                rand_index = np.random.choice(len(x_vals_train), size = batch_size)
-                
-                rand_x = [x_vals_train[rand_index]]
-                rand_y = y_vals_train[rand_index]
+                rand_x = rx
+                rand_y = ry
                 
                 temp_loss,pred_training_s = sess.run([loss,fprob], 
                                                      feed_dict={x_data : np.array([rand_x]).reshape((batch_size,sample_length,input_channels)), 
@@ -378,6 +362,8 @@ def inference(x_vals_train,batch_size,generations):
     accuracy_stdev = np.std(success_rate)
     print("SPEEDS : Mean = ",round(accuracy_mean,4),
           " Std Dev = ",round(accuracy_stdev,4))
+    
+    return prediction_list
         
 
 #test_out = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, varpath)[0])
@@ -385,8 +371,12 @@ def inference(x_vals_train,batch_size,generations):
 #(For analysis. These values are not used by the model directly)
 
 trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-     
-inference(x_vals_train,batch_size,generations)
+
+rand_index = np.random.choice(len(x_vals_train), size = batch_size)
+rx = [x_vals_train[rand_index]]
+ry = y_vals_train[rand_index]
+   
+p_list = inference(rx,ry,batch_size,generations)
 
 conv1d_1_before_pruning = get_var('conv1d_1','kernel')
 conv1d_2_before_pruning = get_var('conv1d_2','kernel')
@@ -395,13 +385,13 @@ conv1d_f_before_pruning = get_var('conv1d_f','kernel')
 # Pruning
 
 c1_norm = l1_norm(conv1d_1_before_pruning)
-prune_layer('conv1d_1','conv1d_2','kernel',3) 
+prune_layer('conv1d_1','conv1d_2','kernel',12) 
 
 c2_norm = l1_norm(conv1d_2_before_pruning)
-prune_layer('conv1d_2','conv1d_f','kernel',3) 
+prune_layer('conv1d_2','conv1d_f','kernel',1) 
 
 cf_norm = l1_norm(conv1d_f_before_pruning)
-prune_layer('conv1d_1',None,'kernel',3) 
+prune_layer('conv1d_f',None,'kernel',1) 
 
 conv1d_1_post_pruning = get_var('conv1d_1','kernel')
 conv1d_2_post_pruning = get_var('conv1d_2','kernel')
@@ -411,6 +401,6 @@ test_bias1 = get_var('conv1d_1','bias')
 test_bias2 = get_var('conv1d_2','bias')
 test_biasf = get_var('conv1d_f','bias')
 
-inference(x_vals_train,batch_size,generations)
+p_list = inference(rx,ry,batch_size,generations)
 
 sess.close()
