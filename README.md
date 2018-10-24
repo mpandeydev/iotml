@@ -37,6 +37,11 @@
       - ```tensor``` : A ```tf.Tensor``` of trained weights from layer to be pruned
       - ```next_tensor``` : A ```tf.Tensor``` of trained weights from next layer (For final layer, use ```None```)
       - ```num_prune``` : Number of kernels to be pruned from current layer
+  - #### Fine Tuning
+    - *Use only after generating pruned filters using ```pruning.py```*
+    - Check or uncheck variable ```assign``` depending on whether or not the network should train from scratch or be assigned the pruned values. (Useful for checking if the pruned filters still represent meaningful features).
+    - Modify hyperparameters if needed
+    - Run script
   
 ## Task List
 
