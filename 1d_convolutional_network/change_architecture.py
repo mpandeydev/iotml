@@ -8,7 +8,8 @@ from mpl_toolkits.mplot3d import Axes3D
 test_on = "types" # speeds or types
 
 variable_scope = "foo" #/ "pruned"
-model = "../trained_models/pure_conv/full_precision_model.ckpt"
+model = "../trained_models/pruned_model.ckpt"
+#"../trained_models/pure_conv/full_precision_model.ckpt"
 #model = "../trained_models/pruned_networks/test_model.ckpt"
 
 logit_size = 8
@@ -23,8 +24,7 @@ hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
 step_size           = 0.2
 
- 
-samplen             = 9008
+samplen             = 9008 
 batch_size          = 200
 input_channels      = 3
  
@@ -85,7 +85,7 @@ def setup(choice):
     global speeds, types 
     global x_vals_train, x_vals_test, x_vals_validation 
     global y_vals_test, y_vals_train, y_vals_validation
-    global logit_size,saver
+    global logit_size,saver,samplen
     
     selected_choice = str(choice)
     localtime = time.asctime( time.localtime(time.time()) )
@@ -147,87 +147,89 @@ def setup(choice):
 
 def generate_model(feature_maps,feature_maps_2,feature_maps_3):
  # Placeholders
-x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
-y_target = tf.placeholder(shape=(None), dtype=tf.int32) 
-  
-with tf.variable_scope(variable_scope):  
-    # First Convolution Layer
-    
-    conv1d_1 = tf.layers.conv1d(
-                                inputs=x_data,
-                                filters=feature_maps,
-                                kernel_size=filter_width,
-                                strides=kernel_stride,
-                                padding="valid",
+    x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
+    y_target = tf.placeholder(shape=(None), dtype=tf.int32) 
+      
+    with tf.variable_scope(variable_scope):  
+        # First Convolution Layer
+        
+        conv1d_1 = tf.layers.conv1d(
+                                    inputs=x_data,
+                                    filters=feature_maps,
+                                    kernel_size=filter_width,
+                                    strides=kernel_stride,
+                                    padding="valid",
+                                    activation=tf.nn.relu,
+                                    name="conv1d_1"
+                                    )
+        conv1d_1_cast = tf.cast(conv1d_1,
+                                precision_np)
+        conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
+                                                      training = True, 
+                                                      fused=False, 
+                                                      name = "bn1")
+        
+        conv1d_1_norm16 = tf.cast(conv1d_1_norm,
+                                  precision_np)
+        
+        # Second Convolution Layer
+        
+        conv1d_2 = tf.layers.conv1d(
+                                    inputs=conv1d_1_norm16,
+                                    filters=feature_maps_2,
+                                    kernel_size=filter_width_2,
+                                    strides=kernel_stride_2,
+                                    padding="valid",
+                                    activation=tf.nn.relu,
+                                    name="conv1d_2"
+                                    )
+        conv1d_2_cast = tf.cast(conv1d_2,
+                                precision_np)
+        conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
+                                                      training = True, 
+                                                      fused=False, 
+                                                      name = "bn2")
+        conv1d_2_norm16 = tf.cast(conv1d_2_norm,
+                                  precision_np)
+        
+        # Final Convolution Layer
+        
+        conv1d_f = tf.layers.conv1d(
+                                    inputs=conv1d_2_norm16,
+                                    filters=feature_maps_3,
+                                    kernel_size=filter_width_3,
+                                    strides=kernel_stride_3,
+                                    padding="valid",
+                                    activation=tf.nn.relu,
+                                    name="conv1d_f"
+                                    )
+        conv1d_3_cast = tf.cast(conv1d_f,
+                                precision_np)
+        conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
+                                                      training = True, 
+                                                      fused=False, 
+                                                      name = "bn3")
+        conv1d_3_norm16 = tf.cast(conv1d_3_norm,
+                                  precision_np)
+        
+        conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
+        
+        # Fully Connected Layers
+        
+        fc_f = tf.layers.dense(
+                                conv1d_flat,
+                                hidden_layer_nodes_f, 
                                 activation=tf.nn.relu,
-                                name="conv1d_1"
+                                name="logits"
                                 )
-    conv1d_1_cast = tf.cast(conv1d_1,
-                            precision_np)
-    conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
-                                                  training = True, 
-                                                  fused=False, 
-                                                  name = "bn1")
-    
-    conv1d_1_norm16 = tf.cast(conv1d_1_norm,
-                              precision_np)
-    
-    # Second Convolution Layer
-    
-    conv1d_2 = tf.layers.conv1d(
-                                inputs=conv1d_1_norm16,
-                                filters=feature_maps_2,
-                                kernel_size=filter_width_2,
-                                strides=kernel_stride_2,
-                                padding="valid",
-                                activation=tf.nn.relu,
-                                name="conv1d_2"
-                                )
-    conv1d_2_cast = tf.cast(conv1d_2,
-                            precision_np)
-    conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
-                                                  training = True, 
-                                                  fused=False, 
-                                                  name = "bn2")
-    conv1d_2_norm16 = tf.cast(conv1d_2_norm,
-                              precision_np)
-    
-    # Final Convolution Layer
-    
-    conv1d_f = tf.layers.conv1d(
-                                inputs=conv1d_2_norm16,
-                                filters=feature_maps_3,
-                                kernel_size=filter_width_3,
-                                strides=kernel_stride_3,
-                                padding="valid",
-                                activation=tf.nn.relu,
-                                name="conv1d_f"
-                                )
-    conv1d_3_cast = tf.cast(conv1d_f,
-                            precision_np)
-    conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
-                                                  training = True, 
-                                                  fused=False, 
-                                                  name = "bn3")
-    conv1d_3_norm16 = tf.cast(conv1d_3_norm,
-                              precision_np)
-    
-    conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
-    
-    # Fully Connected Layers
-    
-    fc_f = tf.layers.dense(
-                            conv1d_flat,
-                            hidden_layer_nodes_f, 
-                            activation=tf.nn.relu,
-                            name="logits"
-                            )
-    fc_f_16 = tf.cast(fc_f,precision)
-    
-    # Fully Connected Layers
-    
-    fprob = tf.nn.softmax(fc_f_16)
-    return tf.get_default_graph()
+        fc_f_16 = tf.cast(fc_f,precision)
+        
+        # Fully Connected Layers
+        
+        fprob = tf.nn.softmax(fc_f_16)
+        loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f_16)
+        
+        return tf.get_default_graph()
     #_____________________________________________________________
     
 import_npy()
@@ -236,12 +238,10 @@ setup(test_on)
  # Placeholders
 # Initialize Graph
 
-thisgraph = generate_model (feature_map, feature_map_2, feature_map_3);
+thisgraph = generate_model (12, 8, 4);
 
 localtime = time.asctime( time.localtime(time.time()) )
 print("Graph Defined :", localtime)
-
-loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,logits=fc_f_16)
 
 # Initialize All Variables
 
@@ -390,7 +390,7 @@ ry = y_vals_train[rand_index]
 saver = tf.train.Saver()
 saver.restore(sess,model)
 
-print("Pruning for layer 1 : ",l1_fm)
+#print("Pruning for layer 1 : ",l1_fm)
    
 #p_list = inference(rx,ry,batch_size,generations)
 

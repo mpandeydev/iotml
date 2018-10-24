@@ -1,2 +1,2 @@
-model_checkpoint_path: "test_model.ckpt"
-all_model_checkpoint_paths: "test_model.ckpt"
+model_checkpoint_path: "pruned_model"
+all_model_checkpoint_paths: "pruned_model"

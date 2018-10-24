@@ -13,6 +13,10 @@ model = "../trained_models/pure_conv/full_precision_model.ckpt"
 
 logit_size = 8
 
+l1_fm = 11   # Number of feature maps to prune
+l2_fm = 7   # Number of feature maps to prune
+l3_fm = 3   # Number of feature maps to prune
+
 precision = tf.float32
 precision_np = np.float32
 
@@ -254,19 +258,6 @@ print("Initialized Variables:", localtime)
 #saver.restore(sess, tf.train.latest_checkpoint('../trained_models/pruned_networks/'))
 
 
-init_g = tf.global_variables_initializer()
-init_l = tf.local_variables_initializer()
-    
-sess.run(init_g)
-sess.run(init_l)
-
-# Restore Model
-
-saver = tf.train.Saver()
-saver.restore(sess,model)
-
-print("Model restored.")
-
 def get_var(layer,parameter):
     varpath = str(variable_scope+"/"+layer+"/"+parameter)
     varout = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, varpath)[0])
@@ -323,7 +314,7 @@ def prune_layer(tensor,next_tensor,parameter,num_prune):
     
     return 0
 
-def crop_kernels(kernel,bias):
+def crop_kernels(kernel,bias,add_to_model=False,kernel_name=None,bias_name=None):
     cols = np.shape(kernel)[1]
     rows = np.shape(kernel)[2]
     
@@ -343,6 +334,12 @@ def crop_kernels(kernel,bias):
     kernel  = np.delete(kernel,rows_to_trim,1)
     kernel  = np.delete(kernel,cols_to_trim,2)
     bias    = np.delete(bias,cols_to_trim)
+    
+    if(add_to_model):
+        kernel_tensor = tf.get_variable(kernel_name,initializer=kernel)
+        bias_tensor = tf.get_variable(bias_name,initializer=bias)
+        sess.run(kernel_tensor.initializer)
+        sess.run(bias_tensor.initializer)
         
     return kernel,bias
 
@@ -390,7 +387,9 @@ def inference(rx,ry,batch_size,generations):
           " Std Dev = ",round(accuracy_stdev,4))
     
     return accuracy_mean
-        
+
+def save_network(save_path):
+    return saver.save(sess,save_path) 
 #______________________________________________________________________________
     
 # Main Program from here on
@@ -398,117 +397,141 @@ def inference(rx,ry,batch_size,generations):
 #test_out = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, varpath)[0])
 # Store values of trained variables 
 #(For analysis. These values are not used by the model directly)
-
-trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-
-X,Y = np.meshgrid(range(feature_maps+1),range(feature_maps_2+1))
-
-ac_list = []
-
-rand_index = np.random.choice(len(x_vals_train), size = batch_size)
-rx = [x_vals_train[rand_index]]
-ry = y_vals_train[rand_index]
-
-l1_fm = 3
-l2_fm = 2
-l3_fm = 0
-
-saver = tf.train.Saver()
-saver.restore(sess,model)
-   
-#p_list = inference(rx,ry,batch_size,generations)
-
-conv1d_1_before_pruning = get_var('conv1d_1','kernel')
-conv1d_2_before_pruning = get_var('conv1d_2','kernel')
-conv1d_f_before_pruning = get_var('conv1d_f','kernel')
-
-# Pruning
-
-c1_norm = l1_norm(conv1d_1_before_pruning)
-prune_layer('conv1d_1','conv1d_2','kernel',l1_fm) 
-
-c2_norm = l1_norm(conv1d_2_before_pruning)
-prune_layer('conv1d_2','conv1d_f','kernel',l2_fm) 
-
-cf_norm = l1_norm(conv1d_f_before_pruning)
-prune_layer('conv1d_f',None,'kernel',l3_fm) 
-
-conv1d_1_post_pruning = get_var('conv1d_1','kernel') 
-conv1d_2_post_pruning = get_var('conv1d_2','kernel')
-conv1d_f_post_pruning = get_var('conv1d_f','kernel')
-
-test_bias1 = get_var('conv1d_1','bias')
-test_bias2 = get_var('conv1d_2','bias')
-test_biasf = get_var('conv1d_f','bias')
-
-conv1d_1_post_pruning_k,test_bias1_k = crop_kernels(conv1d_1_post_pruning,test_bias1)
-conv1d_2_post_pruning_k,test_bias2_k = crop_kernels(conv1d_2_post_pruning,test_bias2)
-conv1d_f_post_pruning_k,test_biasf_k = crop_kernels(conv1d_f_post_pruning,test_biasf)
-
-mean_acc = inference(rx,ry,batch_size,generations)
-print(mean_acc)
-
-# Saves Pruned Filters as Numpy
-
-np.savez("pruned_filters",
-         conv1d_1_post_pruning_k='c1k',
-         conv1d_2_post_pruning_k='c2k',
-         conv1d_f_post_pruning_k='cfk',
-         test_bias1_k='c1b',
-         test_bias2_k='c2b',
-         test_biasf_k='cfb')
-
-flag = 0
-if(flag):    
-    for l3_fm in range(feature_maps_3+1):
-        print("Pruning for layer 3 : ",l3_fm)
-        ac_list_2 = []
-        for l2_fm in range(feature_maps_2+1):
-            print("Pruning for layer 2 : ",l2_fm)
-            ac_list_1 = []
-            for l1_fm in range(feature_maps+1):
-                
-                rand_index = np.random.choice(len(x_vals_train), size = batch_size)
-                rx = [x_vals_train[rand_index]]
-                ry = y_vals_train[rand_index]
-                
-                saver = tf.train.Saver()
-                saver.restore(sess,model)
+    
+with tf.Session() as sess:
+    saver = tf.train.Saver()
+    saver.restore(sess,model)
+    
+    init_g = tf.global_variables_initializer()
+    init_l = tf.local_variables_initializer()
         
-                print("Pruning for layer 1 : ",l1_fm)
-                   
-                #p_list = inference(rx,ry,batch_size,generations)
-                
-                conv1d_1_before_pruning = get_var('conv1d_1','kernel')
-                conv1d_2_before_pruning = get_var('conv1d_2','kernel')
-                conv1d_f_before_pruning = get_var('conv1d_f','kernel')
-                
-                # Pruning
-                
-                c1_norm = l1_norm(conv1d_1_before_pruning)
-                prune_layer('conv1d_1','conv1d_2','kernel',l1_fm) 
-                
-                c2_norm = l1_norm(conv1d_2_before_pruning)
-                prune_layer('conv1d_2','conv1d_f','kernel',l2_fm) 
-                
-                cf_norm = l1_norm(conv1d_f_before_pruning)
-                prune_layer('conv1d_f',None,'kernel',l3_fm) 
-                
-                conv1d_1_post_pruning = get_var('conv1d_1','kernel') 
-                conv1d_2_post_pruning = get_var('conv1d_2','kernel')
-                conv1d_f_post_pruning = get_var('conv1d_f','kernel')
-                
-                test_bias1 = get_var('conv1d_1','bias')
-                test_bias2 = get_var('conv1d_2','bias')
-                test_biasf = get_var('conv1d_f','bias')
-                
-                mean_acc = inference(rx,ry,batch_size,generations)
-                ac_list_1.append(mean_acc)
-                #print()
-            ac_list_2.append(ac_list_1)
-            print()
-        ac_list.append(ac_list_2)
-
-pruned_accuracies = np.array(ac_list)
-
-sess.close()
+    sess.run(init_g)
+    #sess.run(init_l)
+    
+    # Restore Model
+    
+    print("Model restored.")
+    
+    trainable_variables = [v.name for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)]
+    
+    X,Y = np.meshgrid(range(feature_maps+1),range(feature_maps_2+1))
+    
+    ac_list = []
+    
+    rand_index = np.random.choice(len(x_vals_train), size = batch_size)
+    rx = [x_vals_train[rand_index]]
+    ry = y_vals_train[rand_index]
+    
+    saver = tf.train.Saver()
+    saver.restore(sess,model)
+       
+    #p_list = inference(rx,ry,batch_size,generations)
+    
+    conv1d_1_before_pruning = get_var('conv1d_1','kernel')
+    conv1d_2_before_pruning = get_var('conv1d_2','kernel')
+    conv1d_f_before_pruning = get_var('conv1d_f','kernel')
+    
+    # Pruning
+    
+    c1_norm = l1_norm(conv1d_1_before_pruning)
+    prune_layer('conv1d_1','conv1d_2','kernel',l1_fm) 
+    
+    c2_norm = l1_norm(conv1d_2_before_pruning)
+    prune_layer('conv1d_2','conv1d_f','kernel',l2_fm) 
+    
+    cf_norm = l1_norm(conv1d_f_before_pruning)
+    prune_layer('conv1d_f',None,'kernel',l3_fm) 
+    
+    conv1d_1_post_pruning = get_var('conv1d_1','kernel') 
+    conv1d_2_post_pruning = get_var('conv1d_2','kernel')
+    conv1d_f_post_pruning = get_var('conv1d_f','kernel')
+    
+    test_bias1 = get_var('conv1d_1','bias')
+    test_bias2 = get_var('conv1d_2','bias')
+    test_biasf = get_var('conv1d_f','bias')
+    
+    conv1d_1_post_pruning_k,test_bias1_k = crop_kernels(conv1d_1_post_pruning,
+                                                        test_bias1,
+                                                        add_to_model=True,
+                                                        kernel_name="pruned/conv1d_1/kernel",
+                                                        bias_name="pruned/conv1d_1/bias")
+    
+    conv1d_2_post_pruning_k,test_bias2_k = crop_kernels(conv1d_2_post_pruning,
+                                                        test_bias2,
+                                                        add_to_model=True,
+                                                        kernel_name="pruned/conv1d_2/kernel",
+                                                        bias_name="pruned/conv1d_2/bias")
+    
+    conv1d_f_post_pruning_k,test_biasf_k = crop_kernels(conv1d_f_post_pruning,
+                                                        test_biasf,
+                                                        add_to_model=True,
+                                                        kernel_name="pruned/conv1d_f/kernel",
+                                                        bias_name="pruned/conv1d_f/bias")
+    
+    mean_acc = inference(rx,ry,batch_size,generations)
+    print(mean_acc)
+    
+    # Saves Pruned Filters as Numpy
+    
+    np.savez("pruned_filters",
+             conv1d_1_k=conv1d_1_post_pruning_k,
+             conv1d_2_k=conv1d_2_post_pruning_k,
+             conv1d_f_k=conv1d_f_post_pruning_k,
+             conv1d_1_b=test_bias1_k,
+             conv1d_2_b=test_bias2_k,
+             conv1d_f_b=test_biasf_k)
+    
+    
+    flag = 0
+    if(flag):    
+        for l3_fm in range(feature_maps_3+1):
+            print("Pruning for layer 3 : ",l3_fm)
+            ac_list_2 = []
+            for l2_fm in range(feature_maps_2+1):
+                print("Pruning for layer 2 : ",l2_fm)
+                ac_list_1 = []
+                for l1_fm in range(feature_maps+1):
+                    
+                    rand_index = np.random.choice(len(x_vals_train), size = batch_size)
+                    rx = [x_vals_train[rand_index]]
+                    ry = y_vals_train[rand_index]
+                    
+                    saver = tf.train.Saver()
+                    saver.restore(sess,model)
+            
+                    print("Pruning for layer 1 : ",l1_fm)
+                       
+                    #p_list = inference(rx,ry,batch_size,generations)
+                    
+                    conv1d_1_before_pruning = get_var('conv1d_1','kernel')
+                    conv1d_2_before_pruning = get_var('conv1d_2','kernel')
+                    conv1d_f_before_pruning = get_var('conv1d_f','kernel')
+                    
+                    # Pruning
+                    
+                    c1_norm = l1_norm(conv1d_1_before_pruning)
+                    prune_layer('conv1d_1','conv1d_2','kernel',l1_fm) 
+                    
+                    c2_norm = l1_norm(conv1d_2_before_pruning)
+                    prune_layer('conv1d_2','conv1d_f','kernel',l2_fm) 
+                    
+                    cf_norm = l1_norm(conv1d_f_before_pruning)
+                    prune_layer('conv1d_f',None,'kernel',l3_fm) 
+                    
+                    conv1d_1_post_pruning = get_var('conv1d_1','kernel') 
+                    conv1d_2_post_pruning = get_var('conv1d_2','kernel')
+                    conv1d_f_post_pruning = get_var('conv1d_f','kernel')
+                    
+                    test_bias1 = get_var('conv1d_1','bias')
+                    test_bias2 = get_var('conv1d_2','bias')
+                    test_biasf = get_var('conv1d_f','bias')
+                    
+                    mean_acc = inference(rx,ry,batch_size,generations)
+                    ac_list_1.append(mean_acc)
+                    #print()
+                ac_list_2.append(ac_list_1)
+                print()
+            ac_list.append(ac_list_2)
+    
+    pruned_accuracies = np.array(ac_list)
+    save_network("../trained_models/pruned_networks/pruned_model")
