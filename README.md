@@ -7,7 +7,8 @@
 - ```1d_convolutional_network``` : Contains TensorFlow code for generating and training 1D Convolutional graphs, as well as scripts for inferencing and preforming additional post training operations on the model.
   - ```/1d_cnn_training.py``` : Script to generate 1D CNN graph and train it using training dataset _TODO : Clean code and keep vanilla implementation of 1D CNN._
   - ```/1d_cnn_inference.py``` : Script to use trained model to inference using subsets of dataset
-  - ```/pruning.py``` : Script to mask insignificant kernels using an L1 Norm importance metric as described in [Li et al. (2017)](https://arxiv.org/pdf/1608.08710.pdf)
+  - ```/pruning.py``` : Script to prune out insignificant kernels using an L1 Norm importance metric as described in [Li et al. (2017)](https://arxiv.org/pdf/1608.08710.pdf). Saves pruned weights as ```pruned_weights.npz```
+  - ```/pruned_training.py``` : Generates a new network with a pruned architecture as dictated by the results from ```pruning.py```. Loads weights from ```pruned_weights.npz``` to layer variables and fine tunes the network.
   
 - ```trained_models``` : Contains trained TensorFlow models as Checkpoint and Meta files
 
