@@ -16,6 +16,8 @@
 
 ## Usage
 
+![alt text](https://github.com/mpandeydev/iotml/blob/master/legacy_code/temp/Untitled%20Diagram.jpg "Flowchart")
+
 - Download datasets from [here](https://drive.google.com/drive/folders/113brHUKjoL7G4Ylv8XASAufMxLbHNbz5?usp=sharing) to a folder ```datasets``` as mentioned in the file structure.
 
 - ### Training
