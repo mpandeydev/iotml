@@ -9,10 +9,10 @@ import os
 
 precision = tf.float16
 precision_np = np.float32
-logit_size = 8
+logit_size = 100 #8
 
-hidden_layer_nodes = 900
-hidden_layer_nodes_2 = 500
+hidden_layer_nodes = 500 #900
+hidden_layer_nodes_2 = 300 #500
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
 
@@ -23,7 +23,7 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 200
+generations         = 300
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -108,7 +108,7 @@ def quantize_tensor(input_tensor,bits_q):
 
 def op_convert_to_int8(i):
     quantized_tensor = []
-    zero = tf.cast(0,precision)
+    zero = tf.cast(0,tf.int8)
     
     # Round weights to nearest part
     
@@ -120,18 +120,15 @@ def op_convert_to_int8(i):
         quantized_tensor.append(1)
         return 1
     
-    return tf.cast(quantized_tensor,precision)
+    return tf.cast(quantized_tensor,tf.int8)
         
 def convert_tensor_to_int8(input_tensor):
     
     input_array = input_tensor
     
-    flat_x_vals = tf.layers.flatten(input_array)
     quantized_tensor = []
-    
-    quantized_tensor = tf.map_fn(op_convert_to_int8,flat_x_vals)
-    
-    converted_array_t = tf.cast(quantized_tensor,dtype=precision)
+
+    converted_array_t = tf.cast(quantized_tensor,dtype=tf.int8)
 
     return converted_array_t   
 
@@ -200,6 +197,7 @@ def setup(dataset):
     
     seed = 2
     tf.set_random_seed(seed)
+    print(tf.get_seed)
     np.random.seed(seed)
     
     # 80:10:10 data split and normalization
@@ -309,9 +307,15 @@ def run_network():
                             activation=tf.nn.relu,
                             name = "logits"
                             )
-    fc_f_16 = tf.cast(fc_f,precision)  
+    fc_f_16 = tf.cast(fc_f,precision)
     fprob = tf.nn.softmax(fc_f_16)
-    
+
+    tf.summary.histogram("prob", fprob)
+
+    int_prob = tf.cast(fprob, tf.int8)
+
+    tf.summary.histogram("int_prob", int_prob)
+
     localtime = time.asctime( time.localtime(time.time()) )
     print("Graph Defined :", localtime)
     
@@ -323,6 +327,12 @@ def run_network():
     
     loss = tf.losses.sparse_softmax_cross_entropy(labels=y_target,
                                                   logits=fc_f_16)
+    tf.summary.histogram("loss", loss)
+
+    int_loss = tf.cast(loss, tf.int8)
+
+    tf.summary.histogram("int_loss", int_loss)
+
     
 # Optimizer function
     
@@ -362,16 +372,18 @@ def run_network():
     
     qweights = []
     weights = []
-    
+
+    train_writer = tf.summary.FileWriter('./logs/1/train ', sess.graph)
+
     for h in range(quantize_train):
         print( )
         print("Quantize Train Loop iteration : ",h)
         i = 0
         
         for i in range(generations):
-        # if stopping critireon is loss     
-        # while(temp_loss_t>loss_limit):
-        
+            # if stopping critireon is loss
+            # while(temp_loss_t>loss_limit):
+            merge = tf.summary.merge_all()
             i+=1
             dataset_size = len(x_vals)    
             num_iters = dataset_size//batch_size
@@ -387,7 +399,7 @@ def run_network():
                 # Training step
                 _, temp_loss,get_pred = sess.run([train_step,loss,fprob], 
                                                  feed_dict={x_data : np.array([rand_x]).reshape(batch_size,sample_length,input_channels), 
-                                                            y_target:rand_y} )
+                                                            y_target:rand_y } )
                 
             loss_vec.append(temp_loss)
             
@@ -396,9 +408,10 @@ def run_network():
             
             #Training related loss and prediction
             
-            temp_loss_t,get_pred = sess.run([loss,fprob], 
+            summ, temp_loss_t,get_pred = sess.run([merge,loss,fprob],
                                             feed_dict={x_data : np.array([x_vals_train]).reshape((7200,sample_length,input_channels)), 
                                                        y_target:y_vals_train} )
+            train_writer.add_summary(summ, i)
             loss_vec.append(temp_loss_t)
             guess = np.argmax(get_pred,axis=1)
             correct_pred = np.sum(np.equal(guess,y_vals_train))
@@ -408,9 +421,10 @@ def run_network():
             
             # Get testing loss
             
-            test_temp_loss,predict = sess.run([loss,fprob], 
+            summ, test_temp_loss,predict = sess.run([merge, loss,fprob],
                                               feed_dict={x_data : np.array([x_vals_test]).reshape((900,sample_length,input_channels)), 
                                                          y_target:y_vals_test})
+            train_writer.add_summary(summ, i)
             test_loss.append(test_temp_loss)
             test_pred.append(predict)
             test_guess = np.argmax(predict,axis=1)
@@ -420,9 +434,7 @@ def run_network():
             
             # Print updates
             
-            if (i+1)%20==0:
-                print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
-                qweights = []
+            print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
     
             validation_loss,validation_predict = sess.run([loss,fprob], 
                                                           feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), 
@@ -430,6 +442,38 @@ def run_network():
             validation_guess = np.argmax(validation_predict,axis=1)
             validation_correct_pred = np.sum(np.equal(validation_guess,y_vals_validation))
             validation_accuracy = round(validation_correct_pred*100/len(y_vals_validation),4)
+
+            int_loss = tf.cast(loss, tf.int8)
+            int_prob = tf.cast(fprob, tf.int8)
+            summ, temp_loss8, get_pred = sess.run([merge, int_loss, int_prob], feed_dict={
+                x_data: np.array([x_vals_train]).reshape((7200, sample_length, input_channels)),
+                y_target: y_vals_train})
+            train_writer.add_summary(summ, i)
+            loss_vec.append(temp_loss8)
+            guess = np.argmax(get_pred, axis=1)
+            correct_pred = np.sum(np.equal(guess, y_vals_train))
+            successful_guesses.append(correct_pred)
+            success_rate.append(correct_pred / len(x_vals_train))
+            train_accuracy8 = round(correct_pred * 100 / len(x_vals_train), 4)
+
+            # Get testing loss
+            summ, test_temp_loss, predict = sess.run([merge,int_loss, int_prob], feed_dict={
+                x_data: np.array([x_vals_test]).reshape((900, sample_length, input_channels)), y_target: y_vals_test})
+            train_writer.add_summary(summ, i)
+            test_loss.append(test_temp_loss)
+            test_pred.append(predict)
+            test_guess = np.argmax(predict, axis=1)
+            test_correct_pred = np.sum(np.equal(test_guess, y_vals_test))
+            test_rate.append(test_correct_pred / len(y_vals_test))
+            test_accuracy8 = round(test_correct_pred * 100 / len(y_vals_test), 4)
+            print('Generation8: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy8))+'. Test Acc = ' + str((test_accuracy8))+ '. Loss = '  + str(round(test_temp_loss,4)))
+
+            validation_loss, validation_predict = sess.run([int_loss, int_prob], feed_dict={
+                x_data: np.array([x_vals_validation]).reshape((900, sample_length, input_channels)),
+                y_target: y_vals_validation})
+            validation_guess = np.argmax(validation_predict, axis=1)
+            validation_correct_pred = np.sum(np.equal(validation_guess, y_vals_validation))
+            validation_accuracy8 = round(validation_correct_pred * 100 / len(y_vals_validation), 4)
             
             # Plot values
             
@@ -437,6 +481,10 @@ def run_network():
             
         print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
         print("Validation Accuracy = "+str(validation_accuracy))
+        print()
+        print('Generation: ' + str("{0:0=5d}".format(i + 1)) + '. Training Acc = ' + str(
+            (train_accuracy8)) + '. Test Acc = ' + str((test_accuracy8)) + '. Loss = ' + str(round(temp_loss8, 4)))
+        print("Validation Accuracy = " + str(validation_accuracy8))
         print()
                       
         #Training related loss and prediction
@@ -469,7 +517,7 @@ def run_network():
         validation_guess = np.argmax(validation_predict,axis=1)
         validation_correct_pred = np.sum(np.equal(validation_guess,y_vals_validation))
         validation_accuracy = round(validation_correct_pred*100/len(y_vals_validation),4)
-        
+        save_network('./network_2/')
         print("QUANTIZED")
         print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss,4)))
         print("Validation Accuracy = "+str(validation_accuracy))
@@ -489,7 +537,7 @@ def run_network():
     plt.xlabel('Generation')
     plt.ylabel('Success Rate')
     plt.legend(loc='upper right')
-    plt.show()
+    #plt.show()
     
     return weights,qweights
 
