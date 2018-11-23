@@ -9,11 +9,16 @@ import os
 
 assign = 1
 
+quantization = True
+
+selected_data = 'types'
+numpy_file = "pruned_quantized_8_types.npz"
+
 precision = tf.float16
 precision_np = np.float32
 logit_size = 8
 
-hidden_layer_nodes = 900
+hidden_layer_nodes = 900 
 hidden_layer_nodes_2 = 500
 
 hidden_layer_nodes_f = logit_size # Must be the same as output logits
@@ -22,10 +27,10 @@ step_size           = 0.2
 
  
 samplen             = 9000
-batch_size          = 200
+batch_size          = 500
 input_channels      = 3
  
-generations         = 30
+generations         = 200
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -228,15 +233,19 @@ def get_variable(layer,parameter):
     return variable
         
 def run_network(assign):
-    global saver
+    global saver,quantization
     
     # Load pruned weights
     
-    pruned_filters = np.load("pruned_filters.npz")
+    pruned_filters = np.load(numpy_file)
     
     pruned_feature_maps = [np.shape(pruned_filters['conv1d_1_b'])[0],
                            np.shape(pruned_filters['conv1d_2_b'])[0],
                            np.shape(pruned_filters['conv1d_f_b'])[0]]
+    
+    print("Pruned Feature Maps Layer 1 Shape : ",pruned_feature_maps[0])
+    print("Pruned Feature Maps Layer 2 Shape : ",pruned_feature_maps[1])
+    print("Pruned Feature Maps Layer 3 Shape : ",pruned_feature_maps[2])
         
     # Placeholders
     
@@ -393,6 +402,7 @@ def run_network(assign):
     
     qweights = []
     weights = []
+    order = [conv1d_1,conv1d_2, conv1d_f, fc_f]
     
     for h in range(quantize_train):
         print( )
@@ -453,9 +463,13 @@ def run_network(assign):
             # Print updates
             
             print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
-            if (i+1)%20==0:
-                print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
-                qweights = []
+            if (i+1)%40==0:
+                if(quantization):
+                    print("Quantizing...")
+                    qweights = []
+                    for h in range(len(order)):
+                        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/kernel:0'),8))
+                        quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/bias:0'),8)
     
             validation_loss,validation_predict = sess.run([loss,fprob], 
                                                           feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), 
@@ -527,16 +541,21 @@ def run_network(assign):
     return weights,qweights
 
 #______________________________________________________________________________
-
+def plot_histogram(input_tensor):
+    flat_inputs = input_tensor.flatten()
+    plt.hist(flat_inputs,bins = 16)
+    plt.show()
+    
 def save_network(save_path):
     return saver.save(sess,save_path)
 
 with tf.variable_scope("pruned",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("types")
+    setup(selected_data)
     weights,weights_q = run_network(assign)
     variables_names = [v.name for v in tf.trainable_variables()]
     for i in weights_q:
+        plot_histogram(i)
         print(len(np.unique(i)))
     #save_network("../trained_models/bn_quantized_model_types.ckpt")
     sess.close()

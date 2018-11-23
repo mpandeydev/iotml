@@ -6,7 +6,7 @@ import time
 test_on = "types" # speeds or types
 
 variable_scope = "foo" #/ "pruned"
-model = "../trained_models/pure_conv/full_precision_model.ckpt"
+model = "../trained_models//quantized/quantized_8_speeds.ckpt"
 #model = "../trained_models/pruned_networks/test_model.ckpt"
 
 logit_size = 8
@@ -215,6 +215,7 @@ with tf.variable_scope(variable_scope):
                               precision_np)
     
     conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
+    print(tf.size(conv1d_flat))
     
     # Fully Connected Layers
     
@@ -278,7 +279,7 @@ saver.restore(sess,model)
 
 print("Model restored.")
 
-varpath = str(variable_scope+"/conv1d_2/bias")
+varpath = str(variable_scope+"/logits/kernel")
 test_out = sess.run(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, varpath)[0])
 # Store values of trained variables 
 #(For analysis. These values are not used by the model directly)

@@ -1,2 +1,2 @@
-model_checkpoint_path: "pruned_model"
-all_model_checkpoint_paths: "pruned_model"
+model_checkpoint_path: "quantized_8_speeds"
+all_model_checkpoint_paths: "quantized_8_speeds"

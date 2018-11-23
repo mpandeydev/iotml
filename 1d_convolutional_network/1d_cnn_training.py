@@ -6,10 +6,14 @@ import datetime
 import csv
 
 import os
+ 
+selected_data = 'types'
 
 precision = tf.float16
 precision_np = np.float32
 logit_size = 8
+
+quantization = True
 
 hidden_layer_nodes = 900
 hidden_layer_nodes_2 = 500
@@ -23,7 +27,7 @@ samplen             = 9000
 batch_size          = 200
 input_channels      = 3
  
-generations         = 200
+generations         = 500
 loss_limit          = 0.02
 
 sample_length       = 1600
@@ -71,6 +75,11 @@ y_vals_test = []
 
 #--------------------------------------------------------------------------------------------------------------
 
+def plot_histogram(input_tensor):
+    flat_inputs = input_tensor.flatten()
+    plt.hist(flat_inputs,bins = 16)
+    plt.show()
+    
 # General Activation Function
 
 def activation(layer_input,weights,bias):
@@ -144,7 +153,7 @@ def import_npy():
     
     speeds  = tdata[:,3,0]
     types   = tdata[:,3,1]
-    x_vals  = tdata[:,0:3,:]
+    x_vals  = tdata[:,0:3,:].astype(precision_np)
     
     
     # Zero means
@@ -170,8 +179,6 @@ def setup(dataset):
     x_vals = np.array([x[0:sample_length] for x in x_vals])
     choice = np.random.choice(len(x_vals), size = samplen)
     x_vals = x_vals[np.array(choice)]
-    
-    x_vals = x_vals.astype(precision_np)
     
     train_indices = np.random.choice(len(x_vals), round(len(x_vals)*0.8), 
                                      replace=False)
@@ -223,7 +230,7 @@ def print_trainable_variables(train_variables):
         print(v.name)
         
 def run_network():
-    global saver
+    global saver,quantization
     
     # Placeholders
     
@@ -235,7 +242,7 @@ def run_network():
     
     kernel_init = tf.glorot_uniform_initializer(
                                                 seed=None,
-                                                dtype=tf.float16)
+                                                dtype=precision)
          
 # Set up Computation Graph 
     
@@ -251,12 +258,12 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_1"
                                 )
-    conv1d_1_cast = tf.cast(conv1d_1,np.float32)
+    conv1d_1_cast = tf.cast(conv1d_1,tf.float32)
     conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
                                                   training = True, 
                                                   fused=False, 
                                                   name="bn1")
-    conv1d_1_norm16 = tf.cast(conv1d_1_norm,np.float16)
+    conv1d_1_norm16 = tf.cast(conv1d_1_norm,precision)
     
     # Convolution Layer 2
     
@@ -270,12 +277,12 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_2"
                                 )
-    conv1d_2_cast = tf.cast(conv1d_2,np.float32)
+    conv1d_2_cast = tf.cast(conv1d_2,tf.float32)
     conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
                                                   training = True, 
                                                   fused=False, 
                                                   name = "bn2")
-    conv1d_2_norm16 = tf.cast(conv1d_2_norm,np.float16)
+    conv1d_2_norm16 = tf.cast(conv1d_2_norm,precision)
     
     # Final Convolution Layer 
     
@@ -289,12 +296,12 @@ def run_network():
                                 kernel_initializer = kernel_init,
                                 name="conv1d_f"
                                 )
-    conv1d_3_cast = tf.cast(conv1d_f,np.float32)
+    conv1d_3_cast = tf.cast(conv1d_f,tf.float32)
     conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
                                                   training = True, 
                                                   fused=False, 
                                                   name = "bn3")
-    conv1d_3_norm16 = tf.cast(conv1d_3_norm,np.float16)
+    conv1d_3_norm16 = tf.cast(conv1d_3_norm,precision)
     
     # Flatten Feature Maps for FC Layers
     
@@ -362,6 +369,9 @@ def run_network():
     
     qweights = []
     weights = []
+    order = [conv1d_1,conv1d_2, conv1d_f,fc_f]
+    
+    conv1d_f_over_time = []
     
     for h in range(quantize_train):
         print( )
@@ -420,9 +430,28 @@ def run_network():
             
             # Print updates
             
-            if (i+1)%20==0:
+            if (i+1)%50==0:
                 print('Generation: ' + str("{0:0=5d}".format(i+1)) + '. Training Acc = ' + str((train_accuracy))+'. Test Acc = ' + str((test_accuracy))+ '. Loss = '  + str(round(temp_loss_t,4)))
                 qweights = []
+                weights = []
+                
+                
+                with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
+                    weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_1.name)[0] + '/kernel:0')))
+                    weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_2.name)[0] + '/kernel:0')))
+                    weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0')))
+                    weights.append(sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(fc_f.name)[0] + '/kernel:0')))
+                    
+                    conv_f_weights = sess.run(tf.get_default_graph().get_tensor_by_name(os.path.split(conv1d_f.name)[0] + '/kernel:0'))
+                    conv1d_f_over_time.append(np.reshape(np.array(conv_f_weights),(-1)))
+                    #plot_histogram(conv_f_weights)
+                    
+                    
+                if(quantization):
+                    print("Quantizing...")
+                    for h in range(len(order)):
+                        qweights.append(quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/kernel:0'),8))
+                        quantize_tensor(tf.get_default_graph().get_tensor_by_name(os.path.split(order[h].name)[0] + '/bias:0'),8)
     
             validation_loss,validation_predict = sess.run([loss,fprob], 
                                                           feed_dict={x_data : np.array([x_vals_validation]).reshape((900,sample_length,input_channels)), 
@@ -491,19 +520,25 @@ def run_network():
     plt.legend(loc='upper right')
     plt.show()
     
-    return weights,qweights
+    return weights,qweights,np.array(conv1d_f_over_time)
 
 #______________________________________________________________________________
 
 def save_network(save_path):
     return saver.save(sess,save_path)
-
+    
 with tf.variable_scope("foo",reuse=tf.AUTO_REUSE):
     import_npy()
-    setup("types")
-    weights,weights_q = run_network()
+    setup(selected_data)
+    weights,weights_q,cf_over_time = run_network()
     variables_names = [v.name for v in tf.trainable_variables()]
-    for i in weights_q:
+    for i in weights:
+        plot_histogram(i)
         print(len(np.unique(i)))
-    #save_network("../trained_models/bn_quantized_model_types.ckpt")
+    print("QUANTIZED")
+    for i in weights_q:
+        plot_histogram(i)
+        print(len(np.unique(i)))
+    save_network("../trained_models/quantized/quantized_8_types.ckpt")
     sess.close()
+    

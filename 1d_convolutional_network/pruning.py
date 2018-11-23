@@ -8,16 +8,23 @@ from mpl_toolkits.mplot3d import Axes3D
 test_on = "types" # speeds or types
 
 variable_scope = "foo" #/ "pruned"
-model = "../trained_models/pure_conv/full_precision_model.ckpt"
+model = "../trained_models/quantized/quantized_8_types.ckpt"
 #model = "../trained_models/pruned_networks/test_model.ckpt"
+
+numpy_name = "pruned_quantized_8_types"
 
 logit_size = 8
 
-l1_fm = 11   # Number of feature maps to prune
-l2_fm = 7   # Number of feature maps to prune
-l3_fm = 3   # Number of feature maps to prune
+feature_maps          = 12
+l1_fm                 = 6   # Number of feature maps to prune
 
-precision = tf.float32
+feature_maps_2        = 8
+l2_fm                 = 4   # Number of feature maps to prune
+
+feature_maps_3        = 4
+l3_fm                 = 2   # Number of feature maps to prune
+
+precision = tf.float16
 precision_np = np.float32
 
 hidden_layer_nodes = 900
@@ -39,15 +46,12 @@ sample_length       = 1600
 
 filter_width        = 8
 kernel_stride       = 4
-feature_maps        = 12
 
 filter_width_2        = 8
 kernel_stride_2       = 4
-feature_maps_2        = 8
 
 filter_width_3        = 6
 kernel_stride_3       = 4
-feature_maps_3        = 4
 
 pool_sizes          = 4
 pool_stride         = 4
@@ -155,12 +159,19 @@ import_npy()
 setup(test_on)
 
  # Placeholders
-x_data = tf.placeholder(shape=(None, sample_length,3), dtype=tf.float32)
-y_target = tf.placeholder(shape=(None), dtype=tf.int32) 
+x_data = tf.placeholder(shape=(None, sample_length,3), dtype=precision)
+y_target = tf.placeholder(shape=(None), dtype=tf.int32)
   
 with tf.variable_scope(variable_scope):  
     # First Convolution Layer
     
+    
+    # Change functions from here on out if architecture changes
+         
+# Set up Computation Graph 
+    
+    # Convolution Layer 1
+
     conv1d_1 = tf.layers.conv1d(
                                 inputs=x_data,
                                 filters=feature_maps,
@@ -170,17 +181,14 @@ with tf.variable_scope(variable_scope):
                                 activation=tf.nn.relu,
                                 name="conv1d_1"
                                 )
-    conv1d_1_cast = tf.cast(conv1d_1,
-                            precision_np)
+    conv1d_1_cast = tf.cast(conv1d_1,tf.float32)
     conv1d_1_norm = tf.layers.batch_normalization(conv1d_1_cast, 
                                                   training = True, 
                                                   fused=False, 
-                                                  name = "bn1")
+                                                  name="bn1")
+    conv1d_1_norm16 = tf.cast(conv1d_1_norm,precision)
     
-    conv1d_1_norm16 = tf.cast(conv1d_1_norm,
-                              precision_np)
-    
-    # Second Convolution Layer
+    # Convolution Layer 2
     
     conv1d_2 = tf.layers.conv1d(
                                 inputs=conv1d_1_norm16,
@@ -191,16 +199,14 @@ with tf.variable_scope(variable_scope):
                                 activation=tf.nn.relu,
                                 name="conv1d_2"
                                 )
-    conv1d_2_cast = tf.cast(conv1d_2,
-                            precision_np)
+    conv1d_2_cast = tf.cast(conv1d_2,tf.float32)
     conv1d_2_norm = tf.layers.batch_normalization(conv1d_2_cast, 
                                                   training = True, 
                                                   fused=False, 
                                                   name = "bn2")
-    conv1d_2_norm16 = tf.cast(conv1d_2_norm,
-                              precision_np)
+    conv1d_2_norm16 = tf.cast(conv1d_2_norm,precision)
     
-    # Final Convolution Layer
+    # Final Convolution Layer 
     
     conv1d_f = tf.layers.conv1d(
                                 inputs=conv1d_2_norm16,
@@ -211,30 +217,28 @@ with tf.variable_scope(variable_scope):
                                 activation=tf.nn.relu,
                                 name="conv1d_f"
                                 )
-    conv1d_3_cast = tf.cast(conv1d_f,
-                            precision_np)
+    conv1d_3_cast = tf.cast(conv1d_f,tf.float32)
     conv1d_3_norm = tf.layers.batch_normalization(conv1d_3_cast, 
                                                   training = True, 
                                                   fused=False, 
                                                   name = "bn3")
-    conv1d_3_norm16 = tf.cast(conv1d_3_norm,
-                              precision_np)
+    conv1d_3_norm16 = tf.cast(conv1d_3_norm,precision)
+    
+    # Flatten Feature Maps for FC Layers
     
     conv1d_flat = tf.contrib.layers.flatten(conv1d_3_norm16)
     
     # Fully Connected Layers
     
+    
     fc_f = tf.layers.dense(
                             conv1d_flat,
                             hidden_layer_nodes_f, 
                             activation=tf.nn.relu,
-                            name="logits"
+                            name = "logits"
                             )
-    fc_f_16 = tf.cast(fc_f,precision)
-    
-    # Fully Connected Layers
-    
-    fprob = tf.nn.softmax(fc_f_16)
+    fc_f_16 = tf.cast(fc_f,precision)  
+    fprob = tf.nn.softmax(fc_f_16) 
 
 # Initialize Graph
 
@@ -323,12 +327,12 @@ def crop_kernels(kernel,bias,add_to_model=False,kernel_name=None,bias_name=None)
     
     for i in range(cols):
         if(np.sum(kernel[:,i,:])==0):
-            print("Zero in Rows")
+            #print("Zero in Rows")
             rows_to_trim.append(i)
             
     for j in range(rows):
         if(np.sum(kernel[:,:,j])==0):
-            print("Zero in Columns")
+            #print("Zero in Columns")
             cols_to_trim.append(j)
     
     kernel  = np.delete(kernel,rows_to_trim,1)
@@ -424,12 +428,16 @@ with tf.Session() as sess:
     
     saver = tf.train.Saver()
     saver.restore(sess,model)
-       
     #p_list = inference(rx,ry,batch_size,generations)
     
     conv1d_1_before_pruning = get_var('conv1d_1','kernel')
     conv1d_2_before_pruning = get_var('conv1d_2','kernel')
     conv1d_f_before_pruning = get_var('conv1d_f','kernel')
+    
+    print()
+    print("Pre-Pruning")
+    mean_acc = inference(rx,ry,batch_size,generations)
+    print(mean_acc)
     
     # Pruning
     
@@ -467,13 +475,14 @@ with tf.Session() as sess:
                                                         add_to_model=True,
                                                         kernel_name="pruned/conv1d_f/kernel",
                                                         bias_name="pruned/conv1d_f/bias")
-    
+    print()
+    print("Post-Pruning")
     mean_acc = inference(rx,ry,batch_size,generations)
     print(mean_acc)
     
     # Saves Pruned Filters as Numpy
     
-    np.savez("pruned_filters",
+    np.savez(numpy_name,
              conv1d_1_k=conv1d_1_post_pruning_k,
              conv1d_2_k=conv1d_2_post_pruning_k,
              conv1d_f_k=conv1d_f_post_pruning_k,
@@ -482,8 +491,8 @@ with tf.Session() as sess:
              conv1d_f_b=test_biasf_k)
     
     
-    flag = 0
-    if(flag):    
+    iterative_pruning = 0
+    if(iterative_pruning):    
         for l3_fm in range(feature_maps_3+1):
             print("Pruning for layer 3 : ",l3_fm)
             ac_list_2 = []
@@ -496,8 +505,8 @@ with tf.Session() as sess:
                     rx = [x_vals_train[rand_index]]
                     ry = y_vals_train[rand_index]
                     
-                    saver = tf.train.Saver()
-                    saver.restore(sess,model)
+                    #saver = tf.train.Saver()
+                    #saver.restore(sess,model)
             
                     print("Pruning for layer 1 : ",l1_fm)
                        
@@ -533,5 +542,5 @@ with tf.Session() as sess:
                 print()
             ac_list.append(ac_list_2)
     
-    pruned_accuracies = np.array(ac_list)
-    save_network("../trained_models/pruned_networks/pruned_model")
+
+    #save_network(pruned_name)
