@@ -1,3 +1,9 @@
+model = 'model0'
+model_name = model+'.ckpt'
+
+full_precision_path = "models/full_precision/"+model_name
+pruned_path = "models/pruned/"+model_name
+
 batch_size  = 32
 img_h       = 28
 img_w       = 28
@@ -6,7 +12,7 @@ num_labels  = 10
 # Hyperparameters
 
 step_size = 0.001
-total_epochs = 100
+total_epochs = 40
 total_iterations = int(60000/batch_size)
 
 # Network Parameters

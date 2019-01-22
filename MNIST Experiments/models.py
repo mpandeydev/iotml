@@ -15,8 +15,8 @@ def model0():
     
     model_params = config.model0_params
     
-    inputs = tf.placeholder("float", [batch_size, img_h,img_w,1])
-    labels = tf.placeholder("int32", [batch_size])
+    inputs = tf.placeholder("float", [None, img_h,img_w,1])
+    labels = tf.placeholder("int32", [None])
     
     conv_1 = tf.layers.conv2d(
                                 inputs      =inputs,
